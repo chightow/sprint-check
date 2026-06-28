@@ -1,0 +1,3552 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>sprint-check</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:             #0d0d10;
+      --surface:        #13131a;
+      --surface-raised: #1a1a24;
+      --surface-hover:  #1e1e2a;
+      --border:         #232333;
+      --border-muted:   #1b1b28;
+      --border-hover:   #353548;
+      --modal-border:   #34344a;
+      --panel-border:   #2b2b3d;
+      --text:           #e0e0ec;
+      --text-body:      #a5a5bc;
+      --text-muted:     #6a6a82;
+      --text-dim:       #363650;
+      --accent:         #7c6af7;
+      --accent-dim:     rgba(124,106,247,0.12);
+
+      --col-open:       #94a3b8;
+      --col-progress:   #60a5fa;
+      --col-done:       #4ade80;
+      --col-discarded:  #f87171;
+
+      --sidebar-w: 240px;
+      --header-h:  48px;
+      --radius:    8px;
+      --radius-sm: 5px;
+    }
+
+    /* ── Light mode overrides ─────────────────── */
+    html[data-theme="light"] {
+      --bg:             #f2f2f7;
+      --surface:        #ffffff;
+      --surface-raised: #f7f7fc;
+      --surface-hover:  #ededf5;
+      --border:         #dcdce8;
+      --border-muted:   #e8e8f2;
+      --border-hover:   #c0c0d4;
+      --modal-border:   #c9c9dc;
+      --panel-border:   #d8d8e8;
+      --text:           #1a1a2e;
+      --text-body:      #424269;
+      --text-muted:     #52527a;
+      --text-dim:       #b8b8d0;
+      --accent:         #6c5cf7;
+      --accent-dim:     rgba(108,92,247,0.10);
+
+      --col-open:       #64748b;
+      --col-progress:   #2563eb;
+      --col-done:       #16a34a;
+      --col-discarded:  #dc2626;
+    }
+
+    /* smooth theme transition */
+    html { transition: background .2s, color .2s; }
+
+    html, body { height: 100%; background: var(--bg); color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+      font-size: 13px; line-height: 1.5; overflow: hidden; }
+
+    /* ── App shell ────────────────────────────── */
+    #app { display: grid; grid-template-rows: var(--header-h) 1fr; height: 100vh; }
+
+    /* ── Header ───────────────────────────────── */
+    #header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 16px; border-bottom: 1px solid var(--border);
+      background: var(--surface); gap: 12px;
+    }
+    .header-left  { display: flex; align-items: center; gap: 10px; }
+    .brand        { display: flex; align-items: center; gap: 8px; font-weight: 600; letter-spacing: -.3px; }
+    .brand-icon   { width: 20px; height: 20px; background: #1A1A1F; border-radius: 5px;
+                    display: flex; align-items: center; justify-content: center;
+                    flex-shrink: 0; overflow: hidden; }
+    .header-sep   { color: var(--border-hover); font-size: 16px; }
+    .header-project { font-size: 13px; color: var(--text-muted); }
+    .header-right { display: flex; align-items: center; gap: 14px; }
+    .header-branch {
+      display: flex; align-items: center; gap: 5px; font-size: 12px;
+      color: var(--text-muted);
+    }
+    .branch-name { font-family: "JetBrains Mono", "Fira Code", "JetBrains Mono", ui-monospace, monospace; color: var(--accent); }
+    .refresh-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--col-done);
+                   transition: background .3s; flex-shrink: 0; }
+    .refresh-dot.mock    { background: #fb923c; }
+    .refresh-dot.loading { background: var(--col-progress); animation: pulse 1s infinite; }
+    .refresh-dot.error   { background: var(--col-discarded); }
+    @keyframes pulse { 0%,100% { opacity:1 } 50% { opacity:.4 } }
+    .header-stats { display: flex; gap: 8px; }
+    .stat {
+      display: flex; align-items: center; gap: 5px;
+      padding: 3px 9px; background: var(--surface-raised);
+      border: 1px solid var(--border); border-radius: 20px; font-size: 11px;
+    }
+    .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex-shrink:0; }
+
+    /* ── Main layout ──────────────────────────── */
+    #main { display: flex; overflow: hidden; }
+
+    /* ── Sidebar ──────────────────────────────── */
+    #sidebar {
+      flex-shrink: 0; width: var(--sidebar-w);
+      border-right: 1px solid var(--border); background: var(--surface);
+      overflow: hidden; display: flex; flex-direction: column;
+      transition: width .2s ease;
+    }
+    #sidebar.collapsed { width: 44px; }
+    #sidebar.collapsed .sidebar-content { display: none; }
+
+    /* ── Icon rail (collapsed sidebar) ──────────── */
+    .sidebar-icon-rail {
+      display: none; flex-direction: column; align-items: center;
+      padding: 6px 0; gap: 2px; flex: 1; overflow-y: auto;
+    }
+    #sidebar.collapsed .sidebar-icon-rail { display: flex; }
+    .rail-icon {
+      width: 32px; height: 32px;
+      display: flex; align-items: center; justify-content: center;
+      border-radius: var(--radius-sm); color: var(--text-muted);
+      cursor: pointer; transition: background .1s, color .1s;
+    }
+    .rail-icon:hover { background: var(--surface-hover); color: var(--text); }
+    .rail-icon svg {
+      width: 14px; height: 14px; stroke: currentColor; fill: none;
+      stroke-width: 2; stroke-linecap: round; stroke-linejoin: round;
+    }
+
+    .sidebar-toggle {
+      flex-shrink: 0; height: 34px;
+      display: flex; align-items: center; justify-content: flex-end;
+      padding: 0 9px; border-bottom: 1px solid var(--border-muted);
+      cursor: pointer; color: var(--text-muted);
+      transition: background .1s, color .1s;
+    }
+    .sidebar-toggle:hover { background: var(--surface-raised); color: var(--text); }
+    #sidebar.collapsed .sidebar-toggle { justify-content: center; }
+    .sidebar-toggle svg { width: 14px; height: 14px; stroke: currentColor;
+                          fill: none; stroke-width: 2; stroke-linecap: round;
+                          stroke-linejoin: round; flex-shrink: 0;
+                          transition: transform .2s; }
+    #sidebar.collapsed .sidebar-toggle svg { transform: rotate(180deg); }
+
+    .sidebar-content { flex: 1; overflow-y: auto; display: flex; flex-direction: column; }
+
+    /* ── Resize handle ────────────────────────── */
+    #sidebar-resize {
+      width: 5px; flex-shrink: 0; cursor: col-resize;
+      background: transparent; transition: background .15s;
+    }
+    #sidebar-resize:hover, #sidebar-resize.dragging { background: var(--accent); }
+    .sidebar-section { padding: 14px 16px; border-bottom: 1px solid var(--border-muted); }
+    .sidebar-label {
+      font-size: 11px; font-weight: 700; letter-spacing: .1em;
+      text-transform: uppercase; color: var(--text-muted); margin-bottom: 8px;
+    }
+    /* ── Now working on ──────────────────────────── */
+    #s-wip { display: none; }
+    #s-wip.has-items {
+      display: block;
+      background: var(--accent-dim);
+      border-left: 3px solid var(--accent);
+      border-bottom: 1px solid rgba(124,106,247,0.25);
+    }
+    #s-wip .sidebar-label {
+      color: var(--accent);
+      letter-spacing: .12em;
+    }
+    .wip-item {
+      display: flex; align-items: center; gap: 7px;
+      padding: 6px 0; border-bottom: 1px solid rgba(124,106,247,0.15);
+      cursor: pointer; border-radius: var(--radius-sm); transition: background .1s;
+    }
+    .wip-item:hover { background: rgba(124,106,247,0.12); }
+    .wip-item:last-child { border-bottom: none; }
+    .wip-id {
+      font-family: "JetBrains Mono", "Fira Code", "JetBrains Mono", ui-monospace, monospace;
+      font-size: 11px; font-weight: 700; color: var(--accent); flex-shrink: 0;
+    }
+    .wip-title {
+      font-size: 12px; font-weight: 600; color: var(--text); flex: 1;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .wip-copy {
+      flex-shrink: 0; font-size: 10px; padding: 2px 7px; border-radius: 4px;
+      border: 1px solid rgba(124,106,247,0.4); background: transparent;
+      color: var(--accent); cursor: pointer; transition: all .15s;
+    }
+    .wip-copy:hover { background: var(--accent); color: #fff; border-color: var(--accent); }
+    .wip-copy.copied { border-color: var(--col-done); color: var(--col-done); background: transparent; }
+
+    .branch-row { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-muted); }
+    .modified-badge {
+      font-size: 11px; padding: 1px 6px;
+      background: rgba(251,146,60,.15); color: #fb923c;
+      border-radius: 10px; margin-left: auto;
+    }
+    .focus-text { font-size: 13px; color: var(--text); line-height: 1.6; }
+    .commit-list { display: flex; flex-direction: column; gap: 7px; }
+    .commit-item {
+      display: flex; align-items: flex-start; gap: 7px; font-size: 12px;
+      cursor: pointer; border-radius: var(--radius-sm); padding: 3px 4px; margin: -3px -4px;
+      transition: background .1s;
+    }
+    .commit-item:hover { background: var(--surface-hover); }
+    .commit-hash {
+      font-family: "JetBrains Mono", "Fira Code", "JetBrains Mono", ui-monospace, monospace;
+      font-size: 11px; color: var(--accent); flex-shrink: 0; padding-top: 1px;
+    }
+    .commit-msg { color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+    /* ── Commit detail panel ─────────────────────── */
+    #commit-overlay {
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,.45); backdrop-filter: blur(3px);
+      display: flex; align-items: center; justify-content: center; z-index: 100;
+      opacity: 0; pointer-events: none; transition: opacity .15s;
+    }
+    #commit-overlay.open { opacity: 1; pointer-events: auto; }
+    #commit-panel {
+      background: var(--surface); border: 1px solid var(--modal-border);
+      border-radius: 10px; width: min(700px, 92vw); max-height: 82vh;
+      display: flex; flex-direction: column; overflow: hidden;
+      box-shadow: 0 24px 64px rgba(0,0,0,.6);
+      transform: translate(var(--drag-x, 0px), calc(var(--drag-y, 0px) + 12px)) scale(.97);
+      transition: transform .4s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+    #commit-overlay.open #commit-panel { transform: translate(var(--drag-x, 0px), var(--drag-y, 0px)) scale(1); }
+    #commit-panel.dragging-panel { transition: none; }
+    .commit-detail-body {
+      flex: 1; overflow-y: auto; padding: 18px 20px;
+      display: flex; flex-direction: column; gap: 14px;
+      background: var(--surface-raised);
+    }
+    .commit-detail-meta {
+      display: flex; align-items: center; gap: 7px; flex-wrap: wrap;
+      padding: 10px 20px; border-bottom: 1px solid var(--border-muted);
+      background: var(--surface-raised); flex-shrink: 0;
+    }
+    .commit-meta-chip {
+      display: inline-flex; align-items: center; gap: 6px; font-size: 12px;
+      padding: 3px 8px; border: 1px solid var(--border-muted);
+      border-radius: 999px; background: var(--surface);
+      color: var(--text-body);
+    }
+    .commit-detail-msg {
+      font-size: 13px; color: var(--text-body); white-space: pre-wrap; line-height: 1.7;
+      background: var(--surface); border: 1px solid var(--panel-border);
+      border-radius: 8px; padding: 16px 18px;
+    }
+    .commit-detail-msg:empty { display: none; }
+    .commit-section {
+      background: var(--surface); border: 1px solid var(--panel-border);
+      border-radius: 8px; padding: 14px 16px;
+    }
+    .commit-section-label { font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--text-muted); margin-bottom: 8px; }
+    .commit-section-note { font-size: 11px; color: var(--text-muted); margin-bottom: 8px; line-height: 1.5; }
+    .commit-ticket-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+    .commit-ticket-chip {
+      padding: 5px 10px; border-radius: 999px; font-size: 12px; font-weight: 600;
+      border: 1px solid var(--border); background: var(--surface-raised);
+      color: var(--accent); cursor: pointer; font-family: "JetBrains Mono", ui-monospace, monospace;
+      transition: background .1s, border-color .1s;
+    }
+    .commit-ticket-chip:hover { background: var(--accent-dim); border-color: var(--accent); }
+    .commit-file-list { display: flex; flex-direction: column; gap: 5px; }
+    .commit-file {
+      font-family: "JetBrains Mono", "Fira Code", "JetBrains Mono", ui-monospace, monospace; font-size: 11px;
+      color: var(--text-body); padding: 5px 8px;
+      border: 1px solid var(--panel-border); border-radius: 6px;
+      background: var(--surface-raised);
+    }
+    .sidebar-summary { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
+    .summary-item { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-muted); }
+    .summary-icon { width: 14px; height: 14px; flex-shrink: 0; }
+
+    /* ── Board ────────────────────────────────── */
+    #board-wrap {
+      flex: 1; min-width: 0; overflow: hidden;
+      display: flex; flex-direction: column; background: var(--bg);
+    }
+    .board-tools {
+      display: flex; align-items: center; gap: 10px;
+      padding: 12px 14px 0; flex-shrink: 0;
+    }
+    .search-mode {
+      height: 36px; display: inline-flex; align-items: center;
+      padding: 3px; gap: 2px; border: 1px solid var(--border);
+      border-radius: 8px; background: var(--surface);
+    }
+    .search-mode-btn {
+      height: 28px; padding: 0 10px; border: 0; border-radius: 6px;
+      background: transparent; color: var(--text-muted);
+      font: inherit; font-size: 12px; font-weight: 700;
+      cursor: pointer;
+    }
+    .search-mode-btn:hover { color: var(--text); background: var(--surface-hover); }
+    .search-mode-btn.active {
+      color: var(--accent); background: var(--accent-dim);
+    }
+    .board-search {
+      width: min(360px, 100%);
+      display: flex; align-items: center; gap: 8px;
+      padding: 0 11px; height: 36px;
+      border: 1px solid var(--border); border-radius: 8px;
+      background: var(--surface); color: var(--text-muted);
+      transition: border-color .12s, box-shadow .12s, background .12s;
+    }
+    .board-search:focus-within {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 2px var(--accent-dim);
+      background: var(--surface-raised);
+    }
+    .board-search svg {
+      width: 15px; height: 15px; flex-shrink: 0;
+      stroke: currentColor; fill: none; stroke-width: 2;
+      stroke-linecap: round; stroke-linejoin: round;
+    }
+    .board-search input {
+      width: 100%; min-width: 0; border: 0; outline: 0;
+      background: transparent; color: var(--text);
+      font: inherit; font-size: 13px;
+    }
+    .board-search input::placeholder { color: var(--text-muted); }
+    .search-clear {
+      border: 0; background: transparent; color: var(--text-muted);
+      cursor: pointer; padding: 2px; font-size: 15px; line-height: 1;
+      display: none;
+    }
+    .board-search.has-query .search-clear { display: block; }
+    .search-clear:hover { color: var(--text); }
+    .search-count {
+      font-size: 12px; color: var(--text-muted);
+      white-space: nowrap;
+    }
+    #board {
+      display: flex; overflow-x: auto; overflow-y: hidden;
+      padding: 12px 14px 14px; gap: 10px;
+      align-items: flex-start; flex: 1; min-height: 0;
+    }
+    .board-empty-search {
+      margin: 0 14px 14px;
+      padding: 14px 16px; border: 1px dashed var(--border-hover);
+      border-radius: var(--radius); color: var(--text-muted);
+      background: var(--surface); font-size: 13px;
+      display: none;
+    }
+    .board-empty-search.visible { display: block; }
+    .why-results {
+      margin: 12px 14px 0; display: none;
+      border: 1px solid var(--border); border-radius: var(--radius);
+      background: var(--surface); overflow: hidden; flex-shrink: 0;
+    }
+    .why-results.visible { display: block; }
+    .why-results-head {
+      display: flex; align-items: center; justify-content: space-between; gap: 10px;
+      padding: 10px 12px; border-bottom: 1px solid var(--border);
+    }
+    .why-title {
+      color: var(--text); font-size: 13px; font-weight: 700;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .why-subtitle { color: var(--text-muted); font-size: 11px; flex-shrink: 0; }
+    .why-result-list { display: flex; flex-direction: column; }
+    .why-result {
+      border: 0; border-bottom: 1px solid var(--border);
+      background: transparent; color: var(--text); text-align: left;
+      padding: 10px 12px; cursor: pointer;
+    }
+    .why-result:last-child { border-bottom: 0; }
+    .why-result:hover { background: var(--surface-hover); }
+    .why-result-main { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 700; }
+    .why-result-id { color: var(--accent); font-family: var(--mono); font-size: 12px; }
+    .why-result-status { color: var(--text-muted); font-size: 11px; text-transform: uppercase; }
+    .why-result-decision { margin-top: 6px; color: var(--text-muted); font-size: 12px; line-height: 1.5; }
+    .why-result-empty { padding: 12px; color: var(--text-muted); font-size: 13px; }
+    .column {
+      display: flex; flex-direction: column;
+      min-width: 210px; flex: 1; max-width: 320px;
+      background: var(--surface); border-radius: var(--radius);
+      border: 1px solid var(--border); overflow: hidden;
+      max-height: 100%;
+    }
+    .column-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 9px 13px; border-bottom: 1px solid var(--border); flex-shrink: 0;
+    }
+    .column-title {
+      display: flex; align-items: center; gap: 7px;
+      font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase;
+    }
+    .col-indicator { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+    .column-count {
+      font-size: 11px; font-weight: 600; color: var(--text);
+      background: var(--surface-hover); border: 1px solid var(--border-hover);
+      padding: 1px 8px; border-radius: 10px;
+    }
+    .column-body {
+      flex: 1; min-height: 0; overflow-y: auto; padding: 8px;
+      display: flex; flex-direction: column; gap: 6px;
+    }
+    .column-empty {
+      display: flex; align-items: center; justify-content: center;
+      min-height: 60px; color: var(--text-dim); font-size: 12px;
+      border: 1px dashed var(--border-muted); border-radius: var(--radius-sm);
+    }
+
+    /* Column status theming */
+    .col-open       .col-indicator { background: var(--col-open); }
+    .col-open       .column-title  { color: var(--col-open); }
+    .col-progress   .col-indicator { background: var(--col-progress); }
+    .col-progress   .column-title  { color: var(--col-progress); }
+    .col-done       .col-indicator { background: var(--col-done); }
+    .col-done       .column-title  { color: var(--col-done); }
+    .col-discarded  .col-indicator { background: var(--col-discarded); }
+    .col-discarded  .column-title  { color: var(--col-discarded); }
+
+    /* Discarded column is visually de-emphasized */
+    .col-discarded  .column-body   { opacity: .55; }
+    .col-discarded  { max-width: 200px; min-width: 160px; }
+
+    /* ── Show more / less ────────────────────────── */
+    .col-show-more {
+      display: block; width: 100%; margin-top: 6px;
+      padding: 6px; border-radius: var(--radius-sm);
+      border: 1px dashed var(--border-hover); background: none;
+      color: var(--text-muted); font-size: 12px; cursor: pointer;
+      transition: background .12s, color .12s;
+    }
+    .col-show-more:hover { background: var(--surface-raised); color: var(--text); }
+    .col-show-less { border-style: solid; }
+
+    /* ── Drag and drop ───────────────────────────── */
+    .card.dragging  { opacity: .35; transform: scale(.97); pointer-events: none; }
+    .column-body.drag-over {
+      outline: 2px dashed var(--accent); outline-offset: -4px;
+      background: var(--accent-dim); border-radius: var(--radius-sm);
+    }
+
+    /* ── Card ─────────────────────────────────── */
+    .card {
+      background: var(--surface-raised); border: 1px solid var(--border);
+      border-radius: var(--radius); overflow: hidden;
+      cursor: grab; transition: border-color .15s, box-shadow .2s, transform .15s;
+      user-select: none; min-width: 0; flex-shrink: 0; position: relative;
+    }
+    .card::before {
+      content: ''; position: absolute; left: 0; right: 0; top: 0; height: 2px;
+      background: linear-gradient(90deg, var(--status-color, var(--accent)), transparent 82%);
+      transform: scaleX(0); transform-origin: left; opacity: .95;
+      transition: transform .18s ease; z-index: 2;
+    }
+    .card:active { cursor: grabbing; }
+    .card:hover {
+      border-color: var(--border-hover); transform: translateY(-1px);
+      box-shadow:
+        -1px 3px 7px -5px var(--card-glow, rgba(0,0,0,.15)),
+         3px 3px 10px -2px var(--card-glow, rgba(0,0,0,.15)),
+         0   4px 7px  -6px var(--card-glow, rgba(0,0,0,.12));
+    }
+    .card:hover::before { transform: scaleX(1); }
+    .card:hover .card-head { border-bottom-color: var(--status-color, var(--border-hover)); }
+    .card.focused { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-dim); }
+
+    /* Card header zone — subtle raised strip for ID + badge */
+    .card-head {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 7px 11px 6px;
+      background: var(--surface-hover);
+      border-bottom: 1px solid var(--border);
+      position: relative; overflow: hidden; min-width: 0;
+    }
+    /* Subtle dot-matrix texture (inspired by flight card) */
+    .card-head::after {
+      content: ''; position: absolute; inset: 0; pointer-events: none;
+      background-image: radial-gradient(circle, var(--border) 1px, transparent 1px);
+      background-size: 10px 10px; opacity: .35;
+    }
+    .card-id {
+      font-size: 10px; font-weight: 700; letter-spacing: .06em;
+      color: var(--text-muted); position: relative; z-index: 1;
+    }
+
+    /* Card body — title zone */
+    .card-body { padding: 10px 11px 8px; }
+    .card-title {
+      font-size: 13px; font-weight: 500; color: var(--text);
+      line-height: 1.5; overflow-wrap: anywhere; margin: 0;
+      letter-spacing: -.1px;
+    }
+    html[data-theme="light"] .card-title { color: #3d3d60; }
+
+    /* Card footer — 3-column label-above-value grid */
+    .card-footer {
+      display: grid; grid-template-columns: auto auto 1fr;
+      padding: 8px 11px 10px; border-top: 1px solid var(--border-muted);
+      gap: 2px 14px;
+    }
+    .card-meta-col { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+    .card-meta-col:last-child { align-items: flex-end; }
+    .card-meta-label { font-size: 9px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--text-muted); }
+    html[data-theme="light"] .card-meta-label { color: var(--text-dim); }
+    .card-meta-val   { font-size: 11px; color: var(--text-muted); }
+
+    .ready-indicator     { display: flex; align-items: center; gap: 3px; cursor: pointer; min-width: 0; }
+    .ready-dot           { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+    .ready-indicator.ready     .ready-dot { background: var(--col-done); }
+    .ready-indicator.not-ready .ready-dot { background: #f59e0b; }
+    .ready-indicator.incomplete .ready-dot { background: var(--col-discarded); opacity: .85; }
+    .ready-label         { font-size: 9px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; white-space: nowrap; }
+    .ready-indicator.ready      .ready-label { color: var(--col-done); }
+    .ready-indicator.not-ready  .ready-label { color: #f59e0b; }
+    .ready-indicator.incomplete .ready-label { color: var(--col-discarded); opacity: .75; font-weight: 500; }
+    html[data-theme="light"] .ready-indicator.not-ready .ready-dot  { background: #d97706; }
+    html[data-theme="light"] .ready-indicator.not-ready .ready-label { color: #d97706; }
+    .ready-popover {
+      position: fixed; z-index: 9999; pointer-events: none;
+      background: var(--surface-raised); border: 1px solid var(--border);
+      border-radius: var(--radius-sm); padding: 7px 11px;
+      font-size: 11px; color: var(--text); line-height: 1.7;
+      box-shadow: 0 4px 14px rgba(0,0,0,.35);
+      opacity: 0; transition: opacity .15s;
+    }
+    .ready-popover.visible { opacity: 1; }
+
+    /* Archive button on Done cards */
+    .card-archive {
+      display: none; position: absolute; top: 50%; right: 8px; transform: translateY(-50%);
+      font-size: 9px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase;
+      color: var(--text-muted); background: var(--surface-raised); border: 1px solid var(--border);
+      border-radius: var(--radius-sm); padding: 2px 6px; cursor: pointer; z-index: 2;
+      transition: color .1s, background .1s, border-color .1s;
+    }
+    .card:hover .card-archive { display: block; }
+    .card-archive:hover { color: var(--text); border-color: var(--border-hover); background: var(--surface-hover); }
+
+    /* Type badges */
+    .type-badge { font-size: 10px; padding: 1px 6px; border-radius: 4px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; position: relative; z-index: 1; }
+    .type-bug     { background: rgba(248,113,113,.15); color: #f87171; }
+    .type-feature { background: rgba(167,139,250,.15); color: #a78bfa; }
+    .type-task    { background: rgba(96,165,250,.15);  color: #60a5fa; }
+    .type-chore   { background: rgba(156,163,175,.12); color: #9ca3af; }
+    .type-epic    { background: rgba(251,146,60,.15);  color: #fb923c; }
+
+    /* Column-status left border + hover glow color */
+    .col-open      { --card-glow: rgba(148,163,184, .45); --status-color: rgba(148,163,184, .72); }
+    .col-progress  { --card-glow: rgba(96,165,250,  .5);  --status-color: rgba(96,165,250,  .78); }
+    .col-done      { --card-glow: rgba(74,222,128,  .5);  --status-color: rgba(74,222,128,  .78); }
+    .col-discarded { --card-glow: rgba(248,113,113, .45); --status-color: rgba(248,113,113, .72); }
+    html[data-theme="light"] .col-open      { --card-glow: rgba(100,116,139, .35); --status-color: rgba(100,116,139, .55); }
+    html[data-theme="light"] .col-progress  { --card-glow: rgba(37,99,235,   .35); --status-color: rgba(37,99,235,   .62); }
+    html[data-theme="light"] .col-done      { --card-glow: rgba(22,163,74,   .4);  --status-color: rgba(22,163,74,   .65); }
+    html[data-theme="light"] .col-discarded { --card-glow: rgba(220,38,38,   .35); --status-color: rgba(220,38,38,   .58); }
+
+    .col-open      .card { border-left: 3px solid rgba(148,163,184, .5); }
+    .col-progress  .card { border-left: 3px solid rgba(96,165,250,  .5); }
+    .col-done      .card { border-left: 3px solid rgba(74,222,128,  .5); }
+    .col-discarded .card { border-left: 3px solid rgba(248,113,113, .4); }
+    html[data-theme="light"] .col-open      .card { border-left: 3px solid rgba(100,116,139, .4); }
+    html[data-theme="light"] .col-progress  .card { border-left: 3px solid rgba(37,99,235,   .35); }
+    html[data-theme="light"] .col-done      .card { border-left: 3px solid rgba(22,163,74,   .4); }
+    html[data-theme="light"] .col-discarded .card { border-left: 3px solid rgba(220,38,38,   .35); }
+
+    /* Domino card entrance (first render only) */
+    @keyframes card-in {
+      from { opacity: 0; transform: translateY(6px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    .card.animate-in {
+      animation: card-in 0.3s cubic-bezier(0.22, 1.61, 0.36, 1) both;
+      animation-delay: calc(var(--i, 0) * 35ms);
+    }
+
+    /* ── Modal ────────────────────────────────── */
+    #modal-overlay {
+      position: fixed; inset: 0; background: rgba(0,0,0,.65);
+      backdrop-filter: blur(3px); display: flex; align-items: center;
+      justify-content: center; z-index: 100;
+      padding: 12px;
+      opacity: 0; pointer-events: none; transition: opacity .15s;
+    }
+    #modal-overlay.open { opacity: 1; pointer-events: auto; }
+    #modal {
+      background: var(--surface); border: 1px solid var(--modal-border);
+      border-radius: 10px; width: min(740px,92vw); max-height: calc(100vh - 24px);
+      min-width: min(420px, calc(100vw - 24px)); min-height: 320px;
+      max-width: calc(100vw - 24px);
+      display: flex; flex-direction: column; overflow: hidden;
+      box-shadow: 0 24px 64px rgba(0,0,0,.6);
+      transform: translate(var(--drag-x, 0px), calc(var(--drag-y, 0px) + 12px)) scale(.97);
+      transition: transform .4s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+    #modal-overlay.open #modal { transform: translate(var(--drag-x, 0px), var(--drag-y, 0px)) scale(1); }
+    #modal.dragging-panel,
+    #modal.resizing-panel { transition: none; }
+    #modal { position: relative; }
+    .modal-side-drag {
+      position: absolute; top: 0; bottom: 0; width: 10px; z-index: 10;
+      cursor: grab;
+    }
+    .modal-side-drag.drag-left  { left: 0;  border-radius: 10px 0 0 10px; }
+    .modal-side-drag.drag-right { right: 0; border-radius: 0 10px 10px 0; }
+    .modal-side-drag.dragging   { cursor: grabbing; }
+    .modal-resize-handle {
+      position: absolute; right: 0; bottom: 0; width: 22px; height: 22px;
+      z-index: 12; cursor: nwse-resize;
+    }
+    .modal-resize-handle::before {
+      content: ''; position: absolute; right: 6px; bottom: 6px;
+      width: 10px; height: 10px;
+      border-right: 2px solid var(--text-muted);
+      border-bottom: 2px solid var(--text-muted);
+      opacity: 1;
+    }
+    .modal-resize-handle:hover::before,
+    .modal-resize-handle.resizing::before { border-color: var(--accent); opacity: 1; }
+
+    .modal-header {
+      display: flex; align-items: center; gap: 12px;
+      padding: 17px 20px 15px; border-bottom: 1px solid var(--border); flex-shrink: 0;
+      background: var(--surface);
+      cursor: grab;
+    }
+    .modal-header.dragging { cursor: grabbing; }
+    .modal-id {
+      font-family: "JetBrains Mono", "Fira Code", "JetBrains Mono", ui-monospace, monospace;
+      font-size: 11px; color: var(--text-muted); flex-shrink: 0;
+      padding: 2px 7px; border: 1px solid var(--border-muted);
+      border-radius: 999px; background: var(--surface-raised);
+    }
+    .modal-title {
+      flex: 1; font-size: 18px; font-weight: 700; color: var(--text);
+      line-height: 1.25; letter-spacing: 0;
+    }
+    .modal-close {
+      width: 28px; height: 28px; border-radius: 6px;
+      border: 1px solid var(--border); background: transparent;
+      cursor: pointer; display: flex; align-items: center; justify-content: center;
+      color: var(--text-muted); font-size: 14px; transition: background .1s; flex-shrink: 0;
+    }
+    .modal-close:hover { background: var(--surface-raised); color: var(--text); }
+
+    .modal-meta {
+      display: flex; align-items: center; gap: 7px; flex-wrap: wrap;
+      padding: 10px 20px; border-bottom: 1px solid var(--border-muted);
+      background: var(--surface-raised); flex-shrink: 0;
+    }
+    .meta-item {
+      display: flex; align-items: center; gap: 6px; font-size: 12px;
+      padding: 3px 8px; border: 1px solid var(--border-muted);
+      border-radius: 999px; background: var(--surface);
+    }
+    .meta-label { color: var(--text-muted); font-size: 11px; }
+    .meta-val   { color: var(--text); font-weight: 600; }
+
+    .modal-docs {
+      display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+      padding: 10px 20px; border-bottom: 1px solid var(--border-muted);
+      background: var(--surface); flex-shrink: 0;
+    }
+    .modal-docs:empty { display: none; }
+    .modal-docs.editing { border-bottom-color: var(--accent); }
+    .doc-check-tip {
+      margin-left: auto; font-size: 11px; color: var(--text-muted);
+      display: none; align-items: center; gap: 4px; user-select: none;
+      white-space: nowrap;
+    }
+    .doc-check-tip.visible { display: flex; }
+    .doc-check-tip-icon { font-size: 12px; opacity: .7; }
+    .doc-tab {
+      padding: 5px 12px; border-radius: 999px; font-size: 12px; font-weight: 600;
+      border: 1px solid var(--border); background: transparent;
+      color: var(--text-muted); cursor: pointer; transition: background .1s, color .1s, border-color .1s;
+    }
+    .doc-tab:hover { background: var(--surface-hover); color: var(--text); border-color: var(--border-hover); }
+    .doc-tab.active { background: var(--accent-dim); color: var(--accent); border-color: var(--accent); }
+    .doc-tab-new {
+      padding: 5px 12px; border-radius: 999px; font-size: 12px;
+      border: 1px dashed var(--border-hover); background: transparent;
+      color: var(--text-muted); cursor: pointer; transition: color .1s, border-color .1s;
+    }
+    .doc-tab-new:hover { color: var(--text); border-color: var(--accent); }
+    .doc-tab-right {
+      margin-left: auto; display: flex; align-items: center; gap: 6px; flex-shrink: 0;
+    }
+    .doc-nav-btn {
+      padding: 3px 8px; border-radius: 999px; font-size: 13px; font-weight: 700; line-height: 1;
+      border: 1px solid var(--border); background: transparent;
+      color: var(--text-muted); cursor: pointer; transition: background .1s, color .1s, border-color .1s;
+    }
+    .doc-nav-btn:hover:not(:disabled) { background: var(--surface-hover); color: var(--text); border-color: var(--border-hover); }
+    .doc-nav-btn:disabled { opacity: .3; cursor: default; }
+    .doc-edit-btn {
+      padding: 5px 13px; border-radius: 999px; font-size: 12px; font-weight: 600;
+      border: 1px solid var(--border); background: transparent;
+      color: var(--text-muted); cursor: pointer; transition: background .1s, color .1s;
+    }
+    .doc-edit-btn:hover { background: var(--surface-hover); color: var(--text); }
+    .doc-edit-btn:disabled {
+      background: var(--accent-dim); border-color: var(--accent);
+      color: var(--accent); opacity: 1; cursor: default;
+    }
+    .doc-save-btn {
+      padding: 5px 13px; border-radius: 999px; font-size: 12px; font-weight: 600;
+      border: 1px solid var(--accent); background: var(--accent); color: #fff; cursor: pointer;
+      transition: opacity .1s;
+    }
+    .doc-save-btn:hover { opacity: .85; }
+    .doc-cancel-btn {
+      padding: 5px 13px; border-radius: 999px; font-size: 12px; font-weight: 600;
+      border: 1px solid var(--border); background: transparent;
+      color: var(--text-muted); cursor: pointer; transition: background .1s, color .1s;
+    }
+    .doc-cancel-btn:hover { background: var(--surface-hover); color: var(--text); }
+    .doc-tab-new:disabled { opacity: .45; cursor: not-allowed; }
+    .doc-locked-badge {
+      font-size: 11px; color: var(--text-body);
+      display: flex; align-items: center; gap: 5px;
+      padding: 4px 10px; border: 1px solid var(--panel-border); border-radius: 20px;
+      background: var(--surface-raised);
+      cursor: default;
+    }
+    .doc-locked-badge::before { content: '⊘'; font-size: 10px; }
+
+    .modal-body {
+      flex: 1; overflow-y: auto; padding: 16px 20px;
+      min-height: 0;
+      background: var(--surface-raised);
+    }
+    .modal-body-text {
+      font-size: 13px; color: var(--text-body); line-height: 1.65; white-space: pre-wrap;
+      background: var(--surface); border: 1px solid var(--panel-border);
+      border-radius: 8px; padding: 16px 20px; min-height: 140px;
+      box-shadow: 0 1px 0 rgba(255,255,255,.02);
+    }
+    .doc-heading-1,
+    .doc-heading-2,
+    .doc-heading-3 {
+      display: block; color: var(--text); font-weight: 700; letter-spacing: 0;
+      white-space: normal;
+    }
+    .doc-heading-1 { font-size: 17px; margin: 0 0 6px; }
+    .doc-heading-2 { font-size: 14px; margin: 12px 0 3px; }
+    .doc-heading-3 { font-size: 13px; margin: 9px 0 2px; }
+    .doc-table-wrap { overflow-x: auto; margin: 10px 0; }
+    .doc-table { border-collapse: collapse; width: 100%; }
+    .doc-table th, .doc-table td { border: 1px solid var(--border); padding: 5px 10px; text-align: left; vertical-align: top; }
+    .doc-table th { background: var(--surface-raised); color: var(--text); font-weight: 600; font-size: 12px; white-space: nowrap; }
+    .doc-table td { color: var(--text-body); font-size: 12px; line-height: 1.5; overflow-wrap: break-word; }
+    .doc-table tr:hover td { background: var(--surface-hover); }
+    .doc-table td.status-pass    { color: #16a34a; font-weight: 600; }
+    .doc-table td.status-fail    { color: #dc2626; font-weight: 600; }
+    .doc-table td.status-partial { color: #d97706; font-weight: 600; }
+    .doc-table td.status-not-run { color: var(--text-muted); }
+    .section-jumps {
+      position: sticky; top: 0; z-index: 1;
+      display: flex; flex-wrap: wrap; gap: 4px 10px;
+      padding: 10px 0; margin-bottom: 12px;
+      background: var(--surface-raised);
+      border-bottom: 1px solid var(--panel-border);
+    }
+    .section-jump-link {
+      font-size: 11px; color: var(--accent); text-decoration: none; opacity: 0.9;
+    }
+    .section-jump-link:hover { opacity: 1; text-decoration: underline; }
+    .doc-code {
+      font-family: "JetBrains Mono", ui-monospace, monospace;
+      font-size: 11px; background: var(--surface-raised);
+      padding: 1px 5px; border-radius: 4px; color: var(--accent);
+    }
+    .doc-bullet {
+      display: grid; grid-template-columns: 14px minmax(0, 1fr);
+      gap: 4px; margin: 2px 0; color: var(--text-body); white-space: normal;
+    }
+    .doc-bullet-marker { color: var(--text-body); }
+    .doc-check-marker {
+      width: 13px; height: 13px; margin-top: 3px;
+      display: inline-flex; align-items: center; justify-content: center;
+      border: 1px solid var(--col-done); border-radius: 3px;
+      color: var(--col-done); font-size: 10px; line-height: 1; font-weight: 800;
+      background: rgba(74, 222, 128, .12);
+    }
+    html[data-theme="light"] .doc-check-marker {
+      color: #15803d;
+      border-color: rgba(22, 163, 74, .55);
+      background: rgba(22, 163, 74, .12);
+    }
+    .doc-check-marker.open { color: transparent; }
+    .doc-check-open {
+      color: var(--text);
+    }
+    .doc-check-open .doc-check-marker {
+      border-color: var(--col-progress);
+      background: rgba(96, 165, 250, .10);
+      box-shadow: 0 0 0 2px rgba(96, 165, 250, .08);
+    }
+    .doc-bullet[data-check-idx] { cursor: pointer; border-radius: 3px; transition: background .1s; }
+    .doc-bullet[data-check-idx]:hover { background: rgba(255,255,255,.04); }
+    html[data-theme="light"] .doc-bullet[data-check-idx]:hover { background: rgba(0,0,0,.04); }
+    .doc-bullet[data-check-idx].toggling { opacity: .55; pointer-events: none; }
+    .editor-toolbar {
+      display: none; align-items: center; gap: 4px; flex-wrap: wrap;
+      margin-bottom: 10px; padding: 8px 9px;
+      background: var(--surface); border: 1px solid var(--modal-border);
+      border-radius: 8px;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.025);
+    }
+    .editor-toolbar.open { display: flex; }
+    .toolbar-sep { width: 1px; height: 22px; background: var(--modal-border); margin: 0 5px; flex-shrink: 0; opacity: .85; }
+    .editor-tool {
+      width: 36px; height: 32px; padding: 0; border-radius: 7px; font-size: 12px;
+      border: 1px solid var(--modal-border); background: var(--surface-hover);
+      color: var(--text); cursor: pointer;
+      display: inline-flex; align-items: center; justify-content: center;
+      transition: background .1s, border-color .1s, color .1s, box-shadow .1s, transform .1s;
+      box-shadow:
+        inset 0 1px 0 rgba(255,255,255,.035),
+        0 1px 0 rgba(0,0,0,.16);
+    }
+    .editor-tool:hover {
+      background: var(--accent-dim); border-color: var(--accent); color: var(--text);
+      box-shadow: 0 0 0 1px var(--accent-dim);
+      transform: translateY(-1px);
+    }
+    .editor-tool:focus-visible {
+      outline: none;
+      border-color: var(--accent);
+      box-shadow: 0 0 0 2px var(--accent-dim);
+    }
+    .editor-tool:active {
+      transform: translateY(0);
+      background: var(--surface-hover);
+    }
+    .editor-tool svg {
+      width: 17px; height: 17px; stroke: currentColor; fill: none;
+      stroke-width: 2; stroke-linecap: round; stroke-linejoin: round;
+    }
+    .editor-tool .tool-text {
+      font-family: "JetBrains Mono", "Fira Code", "JetBrains Mono", ui-monospace, monospace;
+      font-size: 11px; font-weight: 700;
+    }
+    .modal-edit-area {
+      width: 100%; height: 100%; min-height: 330px; resize: vertical;
+      background: var(--surface); border: 1px solid var(--panel-border);
+      border-radius: 8px; color: var(--text);
+      font-family: "JetBrains Mono", "Fira Code", "JetBrains Mono", ui-monospace, monospace; font-size: 13px;
+      line-height: 1.65; padding: 16px 18px; outline: none;
+      transition: border-color .1s, box-shadow .1s;
+    }
+    .modal-edit-area:focus { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-dim); }
+    .editor-kb-hint { font-size: 11px; color: var(--text-dim); padding: 3px 2px 0; opacity: .7; }
+    .btn-primary {
+      background: var(--accent); border-color: var(--accent); color: #fff;
+    }
+    .btn-primary:hover { background: var(--accent); opacity: .85; }
+    .modal-empty { color: var(--text-dim); font-style: italic; }
+    .acceptance-warning {
+      background: rgba(248,113,113,.09);
+      border: 1px solid rgba(248,113,113,.25);
+      border-radius: 7px;
+      padding: 9px 12px;
+      margin-bottom: 14px;
+      color: var(--col-discarded);
+      font-size: 12px;
+    }
+    .eval-run-id {
+      display: inline-flex; align-items: center; gap: 6px;
+      background: rgba(34,197,94,.08); border: 1px solid rgba(34,197,94,.25);
+      border-radius: 6px; padding: 5px 10px; margin-bottom: 14px;
+      font-size: 11px; color: #16a34a; font-family: monospace;
+    }
+    html[data-theme="light"] .eval-run-id { background: #f0fdf4; border-color: #86efac; color: #15803d; }
+    .eval-run-id-label { font-family: inherit; font-weight: 600; color: var(--text-muted); margin-right: 2px; }
+
+    /* ── Drop gate toast ────────────────────────── */
+    #drop-toast {
+      font-size: 12px; padding: 4px 12px;
+      border: 1px solid transparent; border-radius: 20px;
+      opacity: 0; pointer-events: none;
+      transition: opacity .2s;
+      white-space: nowrap;
+    }
+    #drop-toast.warn  { border-color: rgba(251,191,36,.35); color: #fbbf24; background: rgba(251,191,36,.07); }
+    #drop-toast.block { border-color: rgba(248,113,113,.35); color: var(--col-discarded); background: rgba(248,113,113,.07); }
+    #drop-toast.show  { opacity: 1; pointer-events: auto; }
+    #drop-toast.confirm { border-color: rgba(251,191,36,.35); color: #fbbf24; background: rgba(251,191,36,.07); }
+    html[data-theme="light"] #drop-toast.warn  { border-color: #d97706; color: #92400e; background: #fef3c7; }
+    html[data-theme="light"] #drop-toast.block { border-color: #dc2626; color: #7f1d1d; background: #fee2e2; }
+    html[data-theme="light"] #drop-toast.confirm { border-color: #d97706; color: #92400e; background: #fef3c7; }
+    .toast-confirm { background: none; border: none; cursor: pointer; font-size: 12px; font-weight: 600; text-decoration: underline; color: inherit; margin-left: 8px; padding: 0; }
+
+    /* ── Doc type picker ─────────────────────────── */
+    .doc-picker-label { font-size: 12px; color: var(--text-muted); margin-bottom: 10px; }
+    .doc-type-card {
+      display: block; width: 100%;
+      padding: 8px 12px; border-radius: var(--radius-sm); margin-bottom: 6px;
+      border: 1px solid var(--border); background: var(--surface-raised);
+      cursor: pointer; text-align: left;
+      transition: border-color .12s, background .12s;
+    }
+    .doc-type-card:hover    { border-color: var(--border-hover); background: var(--surface-hover); }
+    .doc-type-card.suggested { border-color: var(--border-hover); }
+    .doc-type-card.selected {
+      border-color: var(--accent);
+      background: var(--accent-dim);
+      box-shadow: inset 0 0 0 1px var(--accent);
+    }
+    .doc-type-name {
+      font-size: 13px; font-weight: 600; color: var(--text);
+      display: flex; align-items: center; gap: 7px; margin-bottom: 1px;
+    }
+    .doc-type-hint  { font-size: 12px; color: var(--text-muted); }
+    .doc-type-badge {
+      font-size: 10px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase;
+      padding: 1px 7px; border-radius: 10px; background: var(--accent); color: #fff;
+    }
+
+    .modal-footer {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 13px 20px; border-top: 1px solid var(--border); flex-shrink: 0;
+      background: var(--surface);
+    }
+    .modal-actions { display: flex; gap: 8px; }
+
+    .btn {
+      padding: 7px 14px; border-radius: 7px;
+      border: 1px solid var(--border); background: var(--surface-raised);
+      color: var(--text); font-size: 12px; font-weight: 600; cursor: pointer;
+      transition: background .1s, border-color .1s;
+    }
+    .btn:hover    { background: var(--surface-hover); border-color: var(--border-hover); }
+    .btn:disabled { opacity: .3; cursor: not-allowed; }
+    .btn-danger   { color: #f87171; }
+    .btn-danger:hover { background: rgba(248,113,113,.1); border-color: rgba(248,113,113,.3); }
+
+    .theme-toggle {
+      width: 28px; height: 28px; border-radius: 6px;
+      border: 1px solid var(--border); background: var(--surface-raised);
+      color: var(--text); cursor: pointer; display: flex; align-items: center; justify-content: center;
+      font-size: 14px; transition: background .1s, border-color .1s;
+      flex-shrink: 0; line-height: 1;
+    }
+    .theme-toggle:hover { background: var(--surface-hover); border-color: var(--border-hover); }
+    .tour-toggle {
+      color: var(--accent);
+      border-color: rgba(124, 106, 247, .42);
+      background: var(--accent-dim);
+    }
+    .tour-toggle:hover {
+      color: #fff;
+      border-color: var(--accent);
+      background: var(--accent);
+    }
+
+    .kbd-hint { font-size: 12px; color: var(--text-dim); }
+
+    /* ── Create ticket button ────────────────────── */
+    .create-btn {
+      padding: 5px 13px; border-radius: 6px; font-size: 12px; font-weight: 500;
+      border: 1px solid var(--accent); background: var(--accent-dim);
+      color: var(--accent); cursor: pointer; flex-shrink: 0;
+      transition: background .1s, color .1s;
+    }
+    .create-btn:hover { background: var(--accent); color: #fff; }
+
+    /* ── Create modal ────────────────────────────── */
+    #create-overlay {
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,.45); backdrop-filter: blur(3px);
+      display: flex; align-items: center; justify-content: center; z-index: 100;
+      padding: 12px;
+      opacity: 0; pointer-events: none; transition: opacity .15s;
+    }
+    #create-overlay.open { opacity: 1; pointer-events: auto; }
+    #create-modal {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 12px; width: min(560px, 90vw); max-height: calc(100vh - 24px);
+      min-width: min(420px, calc(100vw - 24px)); min-height: 360px;
+      max-width: calc(100vw - 24px);
+      display: flex; flex-direction: column; overflow: hidden;
+      box-shadow: 0 24px 64px rgba(0,0,0,.6);
+      transform: translate(var(--drag-x, 0px), calc(var(--drag-y, 0px) + 12px)) scale(.97);
+      transition: transform .4s cubic-bezier(0.34, 1.56, 0.64, 1);
+      position: relative;
+    }
+    #create-overlay.open #create-modal { transform: translate(var(--drag-x, 0px), var(--drag-y, 0px)) scale(1); }
+    #create-modal.dragging-panel,
+    #create-modal.resizing-panel { transition: none; }
+
+    .create-body {
+      padding: 16px 20px; display: flex; flex-direction: column; gap: 12px;
+      flex: 1; min-height: 0; overflow-y: auto;
+    }
+    .create-input {
+      width: 100%; padding: 9px 12px; border-radius: var(--radius-sm);
+      border: 1px solid var(--border); background: var(--surface-raised);
+      color: var(--text); font-size: 14px; outline: none;
+      transition: border-color .1s;
+    }
+    .create-input:focus { border-color: var(--accent); }
+    .create-detect {
+      font-size: 12px; color: var(--text-muted); min-height: 16px;
+      padding-left: 2px;
+    }
+    .create-row { display: flex; align-items: center; gap: 10px; }
+    .create-label { font-size: 12px; color: var(--text-muted); width: 52px; flex-shrink: 0; }
+    .create-pills { display: flex; gap: 6px; flex-wrap: wrap; }
+    .create-pill {
+      padding: 3px 11px; border-radius: 20px; font-size: 12px; font-weight: 500;
+      border: 1px solid var(--border); background: transparent;
+      color: var(--text-muted); cursor: pointer; transition: all .1s;
+    }
+    .create-pill:hover  { border-color: var(--border-hover); color: var(--text); }
+    .create-pill.active { border-color: var(--accent); background: var(--accent-dim); color: var(--accent); }
+    .create-textarea { min-height: 140px; resize: vertical; }
+
+    /* ── Tour panel ──────────────────────────── */
+    #tour-overlay {
+      position: fixed; inset: 0; z-index: 200;
+      background: rgba(0,0,0,.4); backdrop-filter: blur(2px);
+      opacity: 0; pointer-events: none; transition: opacity .2s;
+    }
+    #tour-overlay.open { opacity: 1; pointer-events: auto; }
+    #tour-panel {
+      position: absolute; top: 0; right: 0; bottom: 0; width: min(600px, 92vw);
+      background: var(--surface); border-left: 1px solid var(--border);
+      display: flex; flex-direction: column; overflow: hidden;
+      transform: translateX(100%); transition: transform .35s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+    #tour-overlay.open #tour-panel { transform: translateX(0); }
+    .tour-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 16px 20px; border-bottom: 1px solid var(--border); flex-shrink: 0;
+    }
+    .tour-title { font-size: 14px; font-weight: 700; letter-spacing: -.2px; }
+    .tour-subtitle { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+    .tour-body { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 0; }
+    .tour-section-title {
+      font-size: 10px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase;
+      color: var(--text-muted); margin-bottom: 14px;
+    }
+    .tour-feature { margin-bottom: 14px; }
+    .tour-feature-name { font-size: 13px; font-weight: 600; color: var(--text); margin-bottom: 2px; }
+    .tour-feature-name span { color: var(--accent); margin: 0 4px; }
+    .tour-feature-desc { font-size: 12px; color: var(--text-muted); line-height: 1.6; }
+    .tour-feature-tags { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 5px; }
+    .tour-tag {
+      font-size: 10px; padding: 1px 7px; border-radius: 10px;
+      background: var(--surface-raised); border: 1px solid var(--border);
+      color: var(--text-muted);
+    }
+    .tour-divider { border: none; border-top: 1px solid var(--border-muted); margin: 18px 0; }
+    /* Collapsible screenshot sections */
+    .tour-demo { margin-bottom: 12px; }
+    .tour-demo summary {
+      display: flex; align-items: center; gap: 8px; cursor: pointer;
+      font-size: 12px; font-weight: 600; color: var(--text-muted);
+      padding: 7px 0; list-style: none; border-bottom: 1px solid var(--border-muted);
+      transition: color .1s;
+    }
+    .tour-demo summary:hover { color: var(--text); }
+    .tour-demo summary::before { content: '▶'; font-size: 9px; transition: transform .15s; }
+    .tour-demo[open] summary::before { transform: rotate(90deg); }
+    .tour-demo-body { padding: 12px 0; display: flex; flex-direction: column; gap: 10px; }
+    .tour-screenshot {
+      width: 100%; border-radius: var(--radius); border: 1px solid var(--border);
+      display: block;
+    }
+    .tour-caption { font-size: 11px; color: var(--text-muted); line-height: 1.6; }
+
+    /* ── Scrollbars ───────────────────────────── */
+    ::-webkit-scrollbar       { width: 4px; height: 4px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--accent); border-radius: 2px; opacity: .6; }
+    ::-webkit-scrollbar-thumb:hover { background: var(--accent); }
+  </style>
+</head>
+<body>
+<div id="app">
+
+  <header id="header">
+    <div class="header-left">
+      <div class="brand">
+        <div class="brand-icon">
+          <svg viewBox="0 0 20 20" width="20" height="20" xmlns="http://www.w3.org/2000/svg">
+            <rect width="20" height="20" rx="5" fill="#1A1A1F"/>
+            <rect x="0" y="18.5" width="20" height="1.5" fill="url(#bl)"/>
+            <defs>
+              <linearGradient id="bl" x1="0%" y1="0%" x2="100%" y2="0%">
+                <stop offset="0%"   stop-color="#00FFFF"/>
+                <stop offset="50%"  stop-color="#4FFF00"/>
+                <stop offset="100%" stop-color="#F46600"/>
+              </linearGradient>
+            </defs>
+            <text x="3" y="14.5" font-family="'JetBrains Mono','Fira Code',monospace" font-size="13" font-weight="700" fill="#00FFFF">❯</text>
+          </svg>
+        </div>
+        sprint-check
+      </div>
+      <span class="header-sep">/</span>
+      <span class="header-project" id="h-project">—</span>
+    </div>
+    <div class="header-right">
+      <div class="header-branch">
+        <div class="refresh-dot loading" id="refresh-dot"></div>
+        <span>⎇</span>
+        <span class="branch-name" id="h-branch">—</span>
+      </div>
+      <div class="header-stats">
+        <div class="stat">
+          <span class="dot" style="color:var(--col-open)"></span>
+          <span id="h-open">—</span> open
+        </div>
+        <div class="stat">
+          <span class="dot" style="color:var(--col-progress)"></span>
+          <span id="h-active">—</span> active
+        </div>
+        <div class="stat" id="h-archived-stat" style="display:none;color:var(--text-muted)">
+          <span id="h-archived">0</span> archived
+        </div>
+      </div>
+      <button class="create-btn" id="btn-create" title="Create new ticket">+ New</button>
+      <button class="theme-toggle tour-toggle" id="tour-btn" title="Feature tour" aria-label="Feature tour" style="font-size:13px;font-weight:700;letter-spacing:-.5px">?</button>
+      <button class="theme-toggle" id="theme-toggle" title="Toggle light/dark mode">🌙</button>
+    </div>
+  </header>
+
+  <div id="main">
+    <aside id="sidebar">
+      <div class="sidebar-toggle" id="sidebar-toggle" title="Toggle sidebar">
+        <!-- chevron-left icon -->
+        <svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg>
+      </div>
+      <!-- Icon rail: visible only when sidebar is collapsed -->
+      <div class="sidebar-icon-rail" id="sidebar-rail">
+        <div class="rail-icon" data-section="s-wip" title="Now Working On">
+          <svg viewBox="0 0 24 24"><polygon points="5,3 19,12 5,21"/></svg>
+        </div>
+        <div class="rail-icon" data-section="s-branch" title="Git">
+          <svg viewBox="0 0 24 24"><line x1="6" y1="3" x2="6" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg>
+        </div>
+        <div class="rail-icon" data-section="s-focus" title="Current Focus">
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>
+        </div>
+        <div class="rail-icon" data-section="s-commits" title="Recent Commits">
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        </div>
+        <div class="rail-icon" data-section="s-summary" title="Tickets">
+          <svg viewBox="0 0 24 24"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+        </div>
+      </div>
+      <div class="sidebar-content">
+        <div class="sidebar-section" id="s-wip">
+          <div class="sidebar-label">Now Working On</div>
+          <div id="s-wip-items"></div>
+        </div>
+
+        <div class="sidebar-section">
+          <div class="sidebar-label">Git</div>
+          <div class="branch-row">
+            <span style="color:var(--text-dim)">⎇</span>
+            <span style="font-family:ui-monospace,monospace;font-size:12px;color:var(--accent)" id="s-branch">—</span>
+            <span class="modified-badge" id="s-modified" style="display:none"></span>
+          </div>
+        </div>
+
+        <div class="sidebar-section">
+          <div class="sidebar-label">Current Focus</div>
+          <div class="focus-text" id="s-focus">—</div>
+        </div>
+
+        <div class="sidebar-section">
+          <div class="sidebar-label">Recent Commits</div>
+          <div class="commit-list" id="s-commits"></div>
+        </div>
+
+        <div class="sidebar-section" style="border-bottom:none">
+          <div class="sidebar-label">Tickets</div>
+          <div class="sidebar-summary" id="s-summary"></div>
+        </div>
+      </div>
+    </aside>
+
+    <div id="sidebar-resize"></div>
+    <section id="board-wrap" aria-label="Ticket board">
+      <div class="board-tools">
+        <div class="search-mode" role="group" aria-label="Board query mode">
+          <button class="search-mode-btn active" id="search-mode-search" type="button" data-mode="search">Search</button>
+          <button class="search-mode-btn" id="search-mode-why" type="button" data-mode="why" title="Find tickets and decisions that explain a file's history">Why</button>
+        </div>
+        <label class="board-search" id="board-search-shell">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+          <input id="board-search" type="search" placeholder="Search tickets..." autocomplete="off" spellcheck="false">
+          <button class="search-clear" id="board-search-clear" type="button" aria-label="Clear search">×</button>
+        </label>
+        <div class="search-count" id="board-search-count"></div>
+        <div id="drop-toast"></div>
+      </div>
+      <div class="why-results" id="why-results"></div>
+      <div id="board"></div>
+      <div class="board-empty-search" id="board-empty-search"></div>
+    </section>
+  </div>
+</div>
+
+<!-- Modal -->
+<div id="modal-overlay">
+  <div id="modal">
+    <div class="modal-side-drag drag-left"></div>
+    <div class="modal-side-drag drag-right"></div>
+    <div class="modal-header">
+      <span class="modal-id" id="m-id"></span>
+      <span id="m-type"></span>
+      <div class="modal-title" id="m-title"></div>
+      <button class="modal-close" id="btn-close">✕</button>
+    </div>
+    <div class="modal-meta" id="m-meta"></div>
+    <div class="modal-docs" id="m-docs"></div>
+    <div class="modal-body">
+      <div class="modal-body-text" id="m-body"></div>
+      <div class="editor-toolbar" id="m-editor-toolbar">
+        <button class="editor-tool" type="button" data-insert="checkbox" title="Checkbox" aria-label="Add checkbox">
+          <svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2"></rect></svg>
+        </button>
+        <button class="editor-tool" type="button" data-insert="checked" title="Checked item" aria-label="Add checked item">
+          <svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2"></rect><path d="m8 12 3 3 5-6"></path></svg>
+        </button>
+        <span class="toolbar-sep"></span>
+        <button class="editor-tool" type="button" data-insert="bullet" title="Bullet list" aria-label="Add bullet">
+          <svg viewBox="0 0 24 24"><path d="M8 6h12"></path><path d="M8 12h12"></path><path d="M8 18h12"></path><path d="M4 6h.01"></path><path d="M4 12h.01"></path><path d="M4 18h.01"></path></svg>
+        </button>
+        <button class="editor-tool" type="button" data-insert="number" title="Numbered list" aria-label="Add numbered item">
+          <svg viewBox="0 0 24 24"><path d="M10 6h10"></path><path d="M10 12h10"></path><path d="M10 18h10"></path><path d="M4 6h1v4"></path><path d="M4 10h2"></path><path d="M4 14h2l-2 4h2"></path></svg>
+        </button>
+        <span class="toolbar-sep"></span>
+        <button class="editor-tool" type="button" data-insert="heading" title="Heading" aria-label="Add heading">
+          <span class="tool-text">H2</span>
+        </button>
+        <button class="editor-tool" type="button" data-insert="bold" title="Bold" aria-label="Bold">
+          <span class="tool-text" style="font-weight:700">B</span>
+        </button>
+        <span class="toolbar-sep"></span>
+        <button class="editor-tool" type="button" data-insert="code" title="Inline code" aria-label="Add inline code">
+          <svg viewBox="0 0 24 24"><path d="m16 18 6-6-6-6"></path><path d="m8 6-6 6 6 6"></path></svg>
+        </button>
+        <button class="editor-tool" type="button" data-insert="toggle" title="Code block" aria-label="Add code block">
+          <svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 9h18"/><path d="M7 13h4"/></svg>
+        </button>
+      </div>
+      <textarea id="m-edit-area" class="modal-edit-area" style="display:none" spellcheck="false"></textarea>
+      <div class="editor-kb-hint" id="m-kb-hint" style="display:none">Shift+↵ plain newline &nbsp;·&nbsp; ↵↵ exit list</div>
+    </div>
+    <div class="modal-footer">
+      <div class="modal-actions" id="m-actions"></div>
+      <div class="kbd-hint" id="m-kbd">Esc</div>
+    </div>
+    <div class="modal-resize-handle" title="Resize dialog" aria-label="Resize dialog"></div>
+  </div>
+</div>
+
+<!-- Commit detail panel -->
+<div id="commit-overlay">
+  <div id="commit-panel">
+    <div class="modal-header">
+      <span class="modal-id" id="co-hash"></span>
+      <div class="modal-title" id="co-subject"></div>
+      <button class="modal-close" id="commit-close">✕</button>
+    </div>
+    <div class="commit-detail-meta" id="co-meta"></div>
+    <div class="commit-detail-body">
+      <div class="commit-detail-msg" id="co-body"></div>
+      <div id="co-tickets"></div>
+      <div id="co-files"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Create ticket modal -->
+<div id="create-overlay">
+  <div id="create-modal">
+    <div class="modal-header">
+      <div class="modal-title">New Ticket</div>
+      <div style="margin-left:auto; display:flex; gap:8px; align-items:center;">
+        <button class="doc-save-btn" style="margin-left:0" id="c-submit">Create →</button>
+        <button class="doc-cancel-btn" id="c-cancel">Cancel</button>
+      </div>
+      <button class="modal-close" id="create-close">✕</button>
+    </div>
+    <div class="create-body">
+      <input id="c-title" class="create-input" placeholder="What needs to be done?" autocomplete="off" spellcheck="true">
+      <div class="create-detect" id="c-detect"></div>
+      <div class="create-row">
+        <span class="create-label">Type</span>
+        <div class="create-pills" id="c-types"></div>
+      </div>
+      <div class="create-row">
+        <span class="create-label">Priority</span>
+        <div class="create-pills" id="c-priorities"></div>
+      </div>
+      <div class="editor-toolbar open" id="c-editor-toolbar">
+        <button class="editor-tool" type="button" data-insert="checkbox" title="Checkbox" aria-label="Add checkbox">
+          <svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2"></rect></svg>
+        </button>
+        <button class="editor-tool" type="button" data-insert="checked" title="Checked item" aria-label="Add checked item">
+          <svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2"></rect><path d="m8 12 3 3 5-6"></path></svg>
+        </button>
+        <span class="toolbar-sep"></span>
+        <button class="editor-tool" type="button" data-insert="bullet" title="Bullet list" aria-label="Add bullet">
+          <svg viewBox="0 0 24 24"><path d="M8 6h12"></path><path d="M8 12h12"></path><path d="M8 18h12"></path><path d="M4 6h.01"></path><path d="M4 12h.01"></path><path d="M4 18h.01"></path></svg>
+        </button>
+        <button class="editor-tool" type="button" data-insert="number" title="Numbered list" aria-label="Add numbered item">
+          <svg viewBox="0 0 24 24"><path d="M10 6h10"></path><path d="M10 12h10"></path><path d="M10 18h10"></path><path d="M4 6h1v4"></path><path d="M4 10h2"></path><path d="M4 14h2l-2 4h2"></path></svg>
+        </button>
+        <span class="toolbar-sep"></span>
+        <button class="editor-tool" type="button" data-insert="heading" title="Heading" aria-label="Add heading">
+          <span class="tool-text">H2</span>
+        </button>
+        <button class="editor-tool" type="button" data-insert="bold" title="Bold" aria-label="Bold">
+          <span class="tool-text" style="font-weight:700">B</span>
+        </button>
+        <span class="toolbar-sep"></span>
+        <button class="editor-tool" type="button" data-insert="code" title="Inline code" aria-label="Add inline code">
+          <svg viewBox="0 0 24 24"><path d="m16 18 6-6-6-6"></path><path d="m8 6-6 6 6 6"></path></svg>
+        </button>
+        <button class="editor-tool" type="button" data-insert="toggle" title="Code block" aria-label="Add code block">
+          <svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 9h18"/><path d="M7 13h4"/></svg>
+        </button>
+      </div>
+      <textarea id="c-body" class="modal-edit-area create-textarea" placeholder="Notes (optional)" spellcheck="false"></textarea>
+    </div>
+    <div class="modal-footer">
+      <div class="kbd-hint" id="c-queue"></div>
+    </div>
+    <div class="modal-resize-handle" title="Resize dialog" aria-label="Resize dialog"></div>
+  </div>
+</div>
+
+<!-- Tour panel -->
+<div id="tour-overlay">
+  <div id="tour-panel">
+    <div class="tour-header">
+      <div>
+        <div class="tour-title">sprint-check</div>
+        <div class="tour-subtitle">local kanban · no server · no account</div>
+      </div>
+      <button class="modal-close" id="tour-close">✕</button>
+    </div>
+    <div class="tour-body">
+
+      <div class="tour-section-title">What's inside</div>
+
+      <div class="tour-feature">
+        <div class="tour-feature-name">Kanban board<span>—</span>your <code style="font-size:11px;background:var(--surface-raised);padding:1px 5px;border-radius:3px;color:var(--accent)">.tickets/</code> folder as a live board.</div>
+        <div class="tour-feature-desc">Four columns: Open, In Progress, Done, Discarded. Drag cards to update status instantly. Auto-refreshes every 8 seconds.</div>
+        <div class="tour-feature-tags">
+          <span class="tour-tag">drag-to-move</span>
+          <span class="tour-tag">auto-refresh</span>
+          <span class="tour-tag">light &amp; dark</span>
+        </div>
+      </div>
+
+      <div class="tour-feature">
+        <div class="tour-feature-name">Ticket completeness<span>—</span>readiness baked into every card.</div>
+        <div class="tour-feature-desc">Ready, incomplete, and needs-doc states show whether Acceptance has criteria/tests and Plan has real Approach notes. Hover the indicator for a checklist popover so doc problems surface before close.</div>
+        <div class="tour-feature-tags">
+          <span class="tour-tag">acceptance gate</span>
+          <span class="tour-tag">test plan check</span>
+          <span class="tour-tag">inline warnings</span>
+        </div>
+      </div>
+
+      <div class="tour-feature">
+        <div class="tour-feature-name">Sprint docs<span>—</span>Acceptance and Plan attached to tickets, edited inline.</div>
+        <div class="tour-feature-desc">Open any ticket → click a doc tab to read or edit. Templates guide the format. The editor toolbar inserts checkboxes, bullets, headings, and code at the cursor.</div>
+        <div class="tour-feature-tags">
+          <span class="tour-tag">acceptance.md</span>
+          <span class="tour-tag">plan.md</span>
+          <span class="tour-tag">in-browser editor</span>
+        </div>
+      </div>
+
+      <div class="tour-feature">
+        <div class="tour-feature-name">Commit intelligence<span>—</span>click any commit to see what it touched.</div>
+        <div class="tour-feature-desc">Direct ticket ID matches show first. When no ID is present, semantic keyword matching surfaces the most likely related ticket.</div>
+        <div class="tour-feature-tags">
+          <span class="tour-tag">ID linking</span>
+          <span class="tour-tag">keyword fallback</span>
+          <span class="tour-tag">file diff</span>
+        </div>
+      </div>
+
+      <div class="tour-feature">
+        <div class="tour-feature-name">Create from the board<span>—</span>new tickets without leaving the browser.</div>
+        <div class="tour-feature-desc">The title auto-detects type (feature, task, bug, chore, epic). Set priority, add a description, hit Create — the ticket appears in <code style="font-size:11px;background:var(--surface-raised);padding:1px 5px;border-radius:3px;color:var(--accent)">.tickets/</code> immediately.</div>
+        <div class="tour-feature-tags">
+          <span class="tour-tag">type detection</span>
+          <span class="tour-tag">priority</span>
+          <span class="tour-tag">instant</span>
+        </div>
+      </div>
+
+      <hr class="tour-divider">
+      <div class="tour-section-title">See it in action</div>
+
+      <details class="tour-demo">
+        <summary>Board overview</summary>
+        <div class="tour-demo-body">
+          <img class="tour-screenshot" src="/meta/screenshots/board-dark.png" alt="sprint-check board in dark mode" loading="lazy">
+          <p class="tour-caption">The full kanban board — four columns, sidebar with git context, and the ticket count stats in the header.</p>
+        </div>
+      </details>
+
+      <details class="tour-demo">
+        <summary>Ticket detail &amp; docs</summary>
+        <div class="tour-demo-body">
+          <img class="tour-screenshot" src="/meta/screenshots/ticket-detail.png" alt="Ticket detail modal" loading="lazy">
+          <img class="tour-screenshot" src="/meta/screenshots/ticket-doc-editor.png" alt="Doc editor in ticket modal" loading="lazy">
+          <p class="tour-caption">Click any card to open the detail modal. Switch doc tabs to read or edit Acceptance and Plan without leaving the board.</p>
+        </div>
+      </details>
+
+      <details class="tour-demo">
+        <summary>Ticket completeness</summary>
+        <div class="tour-demo-body">
+          <img class="tour-screenshot" src="/meta/screenshots/ticket-completeness.png" alt="Ticket completeness states" loading="lazy">
+          <p class="tour-caption">Every card shows its readiness state. Red means the Acceptance doc is missing required checklist items — <code style="font-size:11px;background:var(--surface-raised);padding:1px 5px;border-radius:3px;color:var(--accent)">sprint complete</code> will block until fixed.</p>
+        </div>
+      </details>
+
+      <details class="tour-demo">
+        <summary>Commit intelligence</summary>
+        <div class="tour-demo-body">
+          <img class="tour-screenshot" src="/meta/screenshots/commit-detail.png" alt="Commit detail panel" loading="lazy">
+          <p class="tour-caption">Click a commit hash in the sidebar. See the full message, changed files, and which ticket it most likely belongs to.</p>
+        </div>
+      </details>
+
+      <details class="tour-demo">
+        <summary>Drag to move &amp; create tickets</summary>
+        <div class="tour-demo-body">
+          <img class="tour-screenshot" src="/meta/screenshots/drag-drop.png" alt="Drag and drop" loading="lazy">
+          <img class="tour-screenshot" src="/meta/screenshots/new-ticket.png" alt="New ticket modal" loading="lazy">
+          <p class="tour-caption">Drag any card to a new column to update status. Click <strong>+ New</strong> to create from the board — the title suggests a type automatically.</p>
+        </div>
+      </details>
+
+    </div>
+  </div>
+</div>
+
+<script>
+'use strict';
+
+// ── Config ───────────────────────────────────────────────────────────────
+
+const COLUMNS = [
+  { status: 'open',        label: 'Open',        cls: 'col-open',      dotVar: '--col-open'       },
+  { status: 'in_progress', label: 'In Progress',  cls: 'col-progress',  dotVar: '--col-progress'   },
+  { status: 'closed',      label: 'Done',         cls: 'col-done',      dotVar: '--col-done'       },
+  { status: 'cancelled',   label: 'Discarded',    cls: 'col-discarded', dotVar: '--col-discarded'  },
+];
+const STATUS_ORDER = COLUMNS.map(c => c.status);
+
+// ── Mock data (fallback when server not running) ──────────────────────────
+
+const MOCK = {
+  tickets: [
+    { id:'t-ialk', status:'in_progress', type:'feature', priority:1,
+      title:'Build sprint-check GUI — kanban app.html + Python server',
+      created: ago(1), body:'## Goal\nSelf-contained HTML kanban board served by Python stdlib HTTP server.\n\n## Columns\n- Open\n- In Progress\n- Done\n- Discarded\n\n## Sidebar\nHANDOFF Current Focus + recent git log + ticket summary.' },
+    { id:'t-sc02', status:'open', type:'task', priority:2,
+      title:'Wire server.py to read real .tickets/ files',
+      created: ago(0.5), body:'Connect GET /api/tickets to actual ticket files.\nParse YAML frontmatter and return JSON.' },
+    { id:'t-sc03', status:'open', type:'task', priority:2,
+      title:'Add POST endpoint for status changes',
+      created: ago(0.3), body:'POST /api/ticket/:id/status updates the YAML status field in place without corrupting the markdown body.' },
+    { id:'t-sc04', status:'open', type:'chore', priority:3,
+      title:'Register sprint-check in skills.sh + CATALOG',
+      created: ago(0.1), body:'Add skill doc (sprint-check.md), register with skills.sh, update CATALOG.md.' },
+    { id:'t-sc05', status:'closed', type:'task', priority:2,
+      title:'Design folder structure under tools/',
+      created: ago(2), body:'Decision: tools/sprint-check/ for server.py + app.html. Launcher at tools/sprint-check.sh.' },
+    { id:'t-sc06', status:'closed', type:'task', priority:1,
+      title:'Research cross-platform GUI framework',
+      created: ago(3), body:'Evaluated Electrobun, Zero Native (Vercel Labs), Neutralinojs, Python tkinter.\n\nDecision: Python http.server + browser — zero install, works on macOS / Linux / WSL.' },
+    { id:'t-sc07', status:'cancelled', type:'feature', priority:3,
+      title:'Native window via Electrobun',
+      created: ago(4), body:'Dropped — macOS only, requires Bun runtime. Python + browser covers all targets.' },
+  ],
+  handoff: {
+    focus: 'Building sprint-check — local kanban dashboard for canon projects. Sprinting the GUI (app.html) now.',
+  },
+  git: {
+    project: 'canon',
+    branch:  'main',
+    modified: 3,
+    log: [
+      { hash:'f9078a1', message:'feat: add changes summary table to wrapup' },
+      { hash:'8344b7b', message:'feat: silent-pass for all-LOW impact' },
+      { hash:'fbddcff', message:'chore: expand sprint skills list summary' },
+      { hash:'a1f41d7', message:'feat: add impact-analysis sub-skill' },
+      { hash:'1a33da2', message:'docs: update setup guide' },
+    ],
+  },
+};
+
+function ago(days) {
+  return new Date(Date.now() - days * 86400000).toISOString();
+}
+
+// ── State ────────────────────────────────────────────────────────────────
+
+const COLLAPSE_STATUSES = new Set(['closed', 'cancelled']);
+const COL_LIMIT = 5;
+const DEBUG = new URLSearchParams(location.search).has('debug');
+function debugLog(...args) {
+  if (DEBUG) console.log('[sprint-check]', ...args);
+}
+
+// ── Ticket creation ───────────────────────────────────────────────────────
+
+const TICKET_TYPES = ['feature', 'task', 'bug', 'chore', 'epic'];
+
+const TYPE_TEMPLATES = {
+  feature: `## Description\nWhat should be built?\n`,
+  task:    `## Description\nWhat should be done?\n`,
+  bug:     `## Description\nWhat is broken?\n\n## Expected\n\n## Actual\n`,
+  chore:   `## Description\nWhat maintenance work is needed?\n`,
+  epic:    `## Description\nWhat larger outcome should this track?\n`,
+};
+
+function detectTicketType(title) {
+  const t = title.toLowerCase();
+  if (/\b(fix|bug|error|crash|broken|regression|failing|cannot|can'?t)\b/.test(t))
+    return { type: 'bug',     reason: 'looks like a bug fix' };
+  if (/\b(epic|initiative|milestone|programme|program)\b/.test(t))
+    return { type: 'epic',    reason: 'looks like an epic' };
+  if (/\b(chore|cleanup|clean up|remove|delete|deprecat|upgrade|bump|renovate)\b/.test(t))
+    return { type: 'chore',   reason: 'looks like maintenance' };
+  if (/\b(add|build|implement|create|introduce|new|design|support)\b/.test(t))
+    return { type: 'feature', reason: 'looks like a new feature' };
+  return   { type: 'task',    reason: 'general task' };
+}
+
+const DOC_TYPES = [
+  {
+    name: 'Acceptance',  slug: 'acceptance',
+    hint: 'Criteria and Test Plan sections both need checklist items — sprint complete blocks without them.',
+    suggestedFor: ['open', 'in_progress'],
+    template:
+`# Acceptance
+
+<!-- Keep the Ticket line below unchanged. -->
+Ticket: \`<id>\`
+
+## Criteria
+The checklist of behavior that must be true before the sprint can close.
+<!-- Add or edit checklist items below. Keep this heading unchanged. -->
+
+- [ ]
+
+## Test Plan
+The commands or checks that prove the criteria work.
+<!-- Add or edit test commands below. Keep this heading unchanged. -->
+
+- [ ]
+
+## QA
+Edge cases and sign-off.
+<!-- Add or edit QA items below. Keep this heading unchanged. -->
+
+- [ ] Tested locally
+`,
+  },
+  {
+    name: 'Plan',        slug: 'plan',
+    hint: 'Capture the approach and record decisions before source edits begin.',
+    suggestedFor: ['open', 'in_progress'],
+    template:
+`# Plan
+
+<!-- Keep the Ticket line below unchanged. -->
+Ticket: \`<id>\`
+<!-- Keep this doc under ~500 words — it is injected at every session start. -->
+
+## Sign-off
+<!-- Fill in: Tier: <tier> | Risk: <blast radius / key risks, one line> -->
+
+- [ ] Plan approved — proceed to implementation
+
+## Approach
+How will we implement it?
+<!-- Add or edit approach notes below. Keep this heading unchanged. -->
+
+## Files
+<!-- List files to create or modify. -->
+
+## Decisions
+<!-- Record choices made during the sprint. Keep this heading unchanged. -->
+
+### [Decision title]
+- **Choice**:
+- **Why**:
+- **Alternatives considered**:
+`,
+  },
+  {
+    name: 'Research',    slug: 'research',
+    hint: 'Objective compression of truth — what the system does, which files matter, constraints, and unknowns. No implementation planning here.',
+    suggestedFor: ['open', 'in_progress'],
+    template:
+`# Research
+
+<!-- Keep the Ticket line below unchanged. -->
+Ticket: \`<id>\`
+
+## Objective
+One sentence: what system behavior was researched.
+
+## Relevant Files
+| File | Why relevant | Evidence |
+|---|---|---|
+| \`path/file.ext:42\` | Entry point for X | Function Y calls Z |
+
+## System Model
+- Fact about how the subsystem works.
+- Fact about data flow or control flow.
+
+## Constraints
+- Non-obvious constraint and its source.
+
+## Unknowns
+- Question that must be resolved before planning, or "None".
+
+## Not In Scope
+- Relevant-looking files intentionally excluded and why.
+`,
+  },
+];
+
+function recommendedSlug(status, existingSlugs) {
+  if (!existingSlugs.includes('acceptance')) return 'acceptance';
+  if (!existingSlugs.includes('plan')) return 'plan';
+  return null;
+}
+
+function docSlug(t, file) {
+  if (file.includes('/')) return file.split('/').pop().replace('.md', '');
+  return file.replace(`${displayTicketId(t)}-`, '').replace('.md', '');
+}
+
+function docFileFor(t, slug) {
+  const id = displayTicketId(t);
+  return t.layout === 'folder' ? `${id}/${slug}.md` : `${id}-${slug}.md`;
+}
+
+function availableDocTypes(t) {
+  const existingSlugs = (t.docs || []).map(d => docSlug(t, d.file));
+  return DOC_TYPES.filter(dt => !existingSlugs.includes(dt.slug));
+}
+
+const state = {
+  tickets:[], handoff:null, git:null, selectedId:null, expandedCols: new Set(),
+  boardFirstRender: true, query: '', queryMode: 'search', why: null,
+};
+
+// ── Data layer ───────────────────────────────────────────────────────────
+
+async function loadData() {
+  setDot('loading');
+  try {
+    const [tr, hr, gr] = await Promise.all([
+      fetch('/api/tickets?all=1'),
+      fetch('/api/handoff'),
+      fetch('/api/git'),
+    ]);
+    if (!tr.ok) throw new Error();
+    state.tickets = await tr.json();
+    state.handoff = await hr.json();
+    state.git     = await gr.json();
+    setDot('live');
+  } catch {
+    state.tickets = MOCK.tickets;
+    state.handoff = MOCK.handoff;
+    state.git     = MOCK.git;
+    setDot('mock');
+  }
+  render();
+}
+
+function setDot(s) {
+  const el = document.getElementById('refresh-dot');
+  el.className = 'refresh-dot' + (s !== 'live' ? ' ' + s : '');
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────
+
+function esc(s) {
+  return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function displayTicketId(t) {
+  return String(t?.id ?? '').replace(/^(['"])(.*)\1$/, '$2');
+}
+
+function normalizeTicketLineId(value) {
+  return String(value ?? '')
+    .trim()
+    .replace(/^`(.*)`$/, '$1')
+    .replace(/^(['"])(.*)\1$/, '$2');
+}
+
+function titleCase(s) {
+  return String(s ?? '').replace(/\b\w/g, c => c.toUpperCase());
+}
+
+function normalizeSearch(s) {
+  return String(s ?? '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+}
+
+function searchableText(t) {
+  const r = readiness(t);
+  return normalizeSearch([
+    t.id,
+    t.title,
+    t.status,
+    t.type,
+    `p${t.priority ?? 2}`,
+    t.body,
+    r.label,
+    r.ready ? 'ready' : '',
+    r.acceptanceIncomplete ? 'acceptance incomplete incomplete' : '',
+    r.planIncomplete ? 'plan incomplete incomplete' : '',
+    ...(t.docs || []).flatMap(d => [d.name, docSlug(t, d.file)]),
+  ].join(' '));
+}
+
+function primarySearchText(t) {
+  const r = readiness(t);
+  return normalizeSearch([
+    t.id,
+    t.title,
+    t.status,
+    t.type,
+    `p${t.priority ?? 2}`,
+    t.body,
+    r.label,
+    r.ready ? 'ready' : '',
+    r.acceptanceIncomplete ? 'acceptance incomplete incomplete' : '',
+    r.planIncomplete ? 'plan incomplete incomplete' : '',
+  ].join(' '));
+}
+
+function ticketMatchesQuery(t) {
+  const q = normalizeSearch(state.query);
+  if (state.queryMode !== 'search') return true;
+  if (!q) return true;
+  const primary = primarySearchText(t);
+  const readinessQueries = new Set(['ready', 'incomplete', 'acceptance incomplete', 'plan incomplete', 'needs plan', 'needs acc']);
+  if (readinessQueries.has(q)) return primary.includes(q);
+  if (primary.includes(q)) return true;
+  const terms = q.split(/\s+/);
+  if (terms.length > 1) return terms.every(term => primary.includes(term));
+  return searchableText(t).includes(q);
+}
+
+function whyQueryFromInput(value) {
+  const raw = String(value ?? '').trim();
+  const prefixed = raw.match(/^why(?::|\s+)(.+)$/i);
+  return (prefixed ? prefixed[1] : raw).trim();
+}
+
+function age(iso) {
+  if (!iso) return '';
+  const date = iso.includes('T') ? new Date(iso) : new Date(iso + 'T00:00:00');
+  const m = Math.floor((Date.now() - date) / 60000);
+  if (m < 2)   return 'just now';
+  if (m < 60)  return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24)  return `${h}h ago`;
+  const d = Math.floor(h / 24);
+  if (d < 30)  return `${d}d ago`;
+  return `${Math.floor(d/30)}mo ago`;
+}
+
+function typeBadge(type) {
+  const t = type || 'task';
+  return `<span class="type-badge type-${esc(t)}">${esc(t)}</span>`;
+}
+
+function sortChecklistRuns(text) {
+  const lines = text.split('\n');
+  const out = [];
+  for (let i = 0; i < lines.length;) {
+    if (!/^- \[[ xX]\] /.test(lines[i])) {
+      out.push(lines[i]);
+      i++;
+      continue;
+    }
+    const run = [];
+    while (i < lines.length && /^- \[[ xX]\] /.test(lines[i])) {
+      run.push(lines[i]);
+      i++;
+    }
+    out.push(...run.filter(line => /^- \[ \] /.test(line)));
+    out.push(...run.filter(line => !/^- \[ \] /.test(line)));
+  }
+  return out.join('\n');
+}
+
+// Minimal markdown: headers, bold, inline code, checklist items, bullet lists
+function md(raw) {
+  if (!raw) return '';
+  // Pre-stamp each checkbox line with its source position using a null-byte
+  // marker that survives esc() and sortChecklistRuns(), so the rendered index
+  // matches the source file regardless of sort order.
+  let srcIdx = 0;
+  const stamped = raw.replace(/<!--[\s\S]*?-->/g, '').replace(/\n{3,}/g, '\n\n').trim()
+    .replace(/^(- \[[ xX]\] )/gm, m => m + `\x00${srcIdx++}\x00`);
+  return sortChecklistRuns(esc(stamped))
+    .replace(/^# (.+)$/gm,  '<strong class="doc-heading-1">$1</strong>')
+    .replace(/^## (.+)$/gm, '<strong class="doc-heading-2">$1</strong>')
+    .replace(/^### (.+)$/gm,'<strong class="doc-heading-3">$1</strong>')
+    .replace(/\*\*(.+?)\*\*/g,'<strong style="color:var(--text)">$1</strong>')
+    .replace(/^\*\*([^*\n][^\n]*)$/gm,'<strong style="color:var(--text)">$1</strong>')
+    .replace(/`([^`\n]+)`/g, '<code class="doc-code">$1</code>')
+    .replace(/^- \[([ xX])\] \x00(\d+)\x00(.+)$/gm, (_, checked, si, text) => {
+      const done = checked.toLowerCase() === 'x';
+      return `<span class="doc-bullet${done ? '' : ' doc-check-open'}" data-src-idx="${si}"><span class="doc-check-marker${done ? '' : ' open'}">${done ? '✓' : ''}</span><span>${text}</span></span>`;
+    })
+    .replace(/^- (.+)$/gm,  '<span class="doc-bullet"><span class="doc-bullet-marker">·</span><span>$1</span></span>')
+    .replace(/((?:\|[^\n]+(?:\n|$))+)/g, block => {
+      const rows = block.trim().split('\n').filter(r => r.trim());
+      if (rows.length < 2) return block;
+      const [headerRow, sepRow, ...bodyRows] = rows;
+      if (!/^\|[\s|:-]+\|$/.test(sepRow?.trim() || '')) return block;
+      const cells = row => {
+        const safe = row.replace(/<code[^>]*>[^<]*<\/code>/g, m => m.replace(/\|/g, '\x00'));
+        return safe.trim().split(/(?<!\\)\|/).slice(1, -1)
+          .map(c => c.trim().replace(/\x00/g, '|').replace(/\\\|/g, '|'));
+      };
+      const thead = '<thead><tr>' + cells(headerRow).map(c => `<th>${c}</th>`).join('') + '</tr></thead>';
+      const STATUS_CLASSES = { pass: 'status-pass', fail: 'status-fail', partial: 'status-partial', 'not-run': 'status-not-run' };
+      const tbody = bodyRows.length
+        ? '<tbody>' + bodyRows.map(r => '<tr>' + cells(r).map(c => {
+            const cls = STATUS_CLASSES[c.trim().toLowerCase()];
+            return `<td${cls ? ` class="${cls}"` : ''}>${c}</td>`;
+          }).join('') + '</tr>').join('') + '</tbody>'
+        : '';
+      return `<div class="doc-table-wrap"><table class="doc-table">${thead}${tbody}</table></div>`;
+    });
+}
+
+// ── Render ────────────────────────────────────────────────────────────────
+
+function render() {
+  renderHeader();
+  renderSidebar();
+  renderBoard();
+}
+
+function renderHeader() {
+  const { git, tickets } = state;
+  setText('h-project',  git?.project || 'project');
+  document.getElementById('h-project').title = git?.root || '';
+  setText('h-branch',   git?.branch  || '—');
+  setText('s-branch',   git?.branch  || '—');
+  setText('h-open',     tickets.filter(t => t.status === 'open').length);
+  setText('h-active',   tickets.filter(t => t.status === 'in_progress').length);
+  const archivedCount = tickets.filter(t => t.status === 'archived').length;
+  setText('h-archived', archivedCount);
+  document.getElementById('h-archived-stat').style.display = archivedCount > 0 ? '' : 'none';
+  const mod = document.getElementById('s-modified');
+  if ((git?.modified ?? 0) > 0) { mod.textContent = `${git.modified} modified`; mod.style.display=''; }
+  else mod.style.display = 'none';
+}
+
+function renderSidebar() {
+  const { handoff, git, tickets } = state;
+
+  // Now Working On
+  const wip    = tickets.filter(t => t.status === 'in_progress');
+  const wipEl  = document.getElementById('s-wip');
+  const wipItems = document.getElementById('s-wip-items');
+  if (wip.length) {
+    wipEl.classList.add('has-items');
+    wipItems.innerHTML = wip.map(t =>
+      `<div class="wip-item" data-id="${esc(t.id)}" role="button" tabindex="0" title="Open ticket">` +
+        `<span class="wip-id">${esc(t.id)}</span>` +
+        `<span class="wip-title">${esc(t.title)}</span>` +
+        `<button class="wip-copy" data-copy="${esc(t.id)}: " title="Copy commit prefix — paste into your git commit message">copy</button>` +
+      `</div>`
+    ).join('');
+    wipItems.querySelectorAll('.wip-item').forEach(row => {
+      row.addEventListener('click', e => {
+        if (e.target.classList.contains('wip-copy')) return;
+        openModal(row.dataset.id);
+      });
+      row.addEventListener('keydown', e => {
+        if (e.key === 'Enter') row.click();
+      });
+    });
+    wipItems.querySelectorAll('.wip-copy').forEach(btn => {
+      btn.addEventListener('click', e => {
+        e.stopPropagation();
+        navigator.clipboard.writeText(btn.dataset.copy).then(() => {
+          btn.textContent = 'done'; btn.classList.add('copied');
+          setTimeout(() => { btn.textContent = 'copy'; btn.classList.remove('copied'); }, 1500);
+        });
+      });
+    });
+  } else {
+    wipEl.classList.remove('has-items');
+  }
+
+  setText('s-focus', handoff?.focus || 'No HANDOFF.md Current Focus found.');
+
+  const commitsEl = document.getElementById('s-commits');
+  commitsEl.innerHTML = (git?.log ?? []).slice(0,5).map(c =>
+    `<div class="commit-item" data-hash="${esc(c.hash)}">` +
+      `<span class="commit-hash">${esc(c.hash.slice(0,7))}</span>` +
+      `<span class="commit-msg">${esc(c.message)}</span>` +
+    `</div>`
+  ).join('') || '<span style="color:var(--text-dim);font-size:12px">No commits</span>';
+
+  commitsEl.querySelectorAll('.commit-item').forEach(el => {
+    el.addEventListener('click', () => openCommitPanel(el.dataset.hash));
+  });
+
+  const STATUS_ICONS = {
+    open:        `<svg class="summary-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="8" cy="8" r="6"/><path d="M8 5v3.5l2 1.5"/></svg>`,
+    in_progress: `<svg class="summary-icon" viewBox="0 0 16 16" fill="currentColor"><path d="M6 4.5l6 3.5-6 3.5V4.5z"/><rect x="3" y="4" width="1.5" height="8" rx=".5"/></svg>`,
+    closed:      `<svg class="summary-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="6"/><path d="M5.5 8.5l2 2 3-4"/></svg>`,
+    cancelled:   `<svg class="summary-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="8" cy="8" r="6"/><path d="M5.5 5.5l5 5M10.5 5.5l-5 5"/></svg>`,
+  };
+  document.getElementById('s-summary').innerHTML = COLUMNS.map(col => {
+    const count = tickets.filter(t => t.status === col.status).length;
+    const iconColor = col.status === 'in_progress' ? 'var(--col-progress)'
+                    : col.status === 'closed'      ? 'var(--col-done)'
+                    : col.status === 'cancelled'   ? 'var(--col-discarded)'
+                    : `var(--col-${col.status})`;
+    return `<div class="summary-item" style="color:${iconColor}">
+      ${STATUS_ICONS[col.status] || ''}
+      <span style="color:var(--text-muted)">${count} ${esc(col.label.toLowerCase())}</span>
+    </div>`;
+  }).join('');
+}
+
+function renderWhyResults() {
+  const el = document.getElementById('why-results');
+  if (!el) return;
+  const q = whyQueryFromInput(state.query);
+  const visible = state.queryMode === 'why' && Boolean(q);
+  el.classList.toggle('visible', visible);
+  if (!visible) {
+    el.innerHTML = '';
+    return;
+  }
+
+  const why = state.why;
+  const file = esc(q);
+  if (why?.loading) {
+    el.innerHTML =
+      `<div class="why-results-head"><div class="why-title">Code archaeology: ${file}</div>` +
+      `<div class="why-subtitle">loading</div></div>`;
+    return;
+  }
+  if (why?.error) {
+    el.innerHTML =
+      `<div class="why-results-head"><div class="why-title">Code archaeology: ${file}</div></div>` +
+      `<div class="why-result-empty">${esc(why.error)}</div>`;
+    return;
+  }
+
+  const results = why?.file === q ? (why.results || []) : [];
+  const message = why?.file === q ? why.message : '';
+  el.innerHTML =
+    `<div class="why-results-head">` +
+      `<div class="why-title">Code archaeology: ${file}</div>` +
+      `<div class="why-subtitle">${results.length ? `${results.length} ticket${results.length === 1 ? '' : 's'}` : 'why mode'}</div>` +
+    `</div>` +
+    (results.length
+      ? `<div class="why-result-list">` + results.map(r =>
+          `<button class="why-result" type="button" data-id="${esc(r.id)}">` +
+            `<div class="why-result-main">` +
+              `<span class="why-result-id">${esc(r.id)}</span>` +
+              `<span class="why-result-status">${esc(r.status)}</span>` +
+              `<span>${esc(r.title)}</span>` +
+            `</div>` +
+            (r.decision ? `<div class="why-result-decision">→ ${esc(r.decision)}</div>` : '') +
+          `</button>`
+        ).join('') + `</div>`
+      : `<div class="why-result-empty">${esc(message || 'No tickets found for this file.')}</div>`);
+  el.querySelectorAll('.why-result').forEach(btn => {
+    btn.addEventListener('click', () => openModal(btn.dataset.id));
+  });
+}
+
+function renderBoard() {
+  const board = document.getElementById('board');
+  const query = state.queryMode === 'search' ? normalizeSearch(state.query) : '';
+  const tickets = state.tickets.filter(ticketMatchesQuery);
+  const countEl = document.getElementById('board-search-count');
+  const emptyEl = document.getElementById('board-empty-search');
+  renderWhyResults();
+  if (countEl) {
+    countEl.textContent = query ? `${tickets.length} of ${state.tickets.length}` : '';
+  }
+  if (emptyEl) {
+    emptyEl.classList.toggle('visible', Boolean(query) && tickets.length === 0);
+    emptyEl.textContent = `No tickets match “${state.query}”.`;
+  }
+  board.innerHTML = COLUMNS.map(col => {
+    const cards = tickets
+      .filter(t => t.status === col.status)
+      .sort((a, b) => (b.created || '').localeCompare(a.created || ''));
+    const limited = COLLAPSE_STATUSES.has(col.status) && !state.expandedCols.has(col.status);
+    const visible = limited ? cards.slice(0, COL_LIMIT) : cards;
+    const hidden  = cards.length - visible.length;
+    return `
+      <div class="column ${esc(col.cls)}">
+        <div class="column-header">
+          <div class="column-title"><div class="col-indicator"></div>${esc(col.label)}</div>
+          ${cards.length > 0 ? `<span class="column-count">${cards.length}</span>` : ''}
+        </div>
+        <div class="column-body" data-status="${esc(col.status)}">
+          ${visible.length
+            ? visible.map((t, i) => cardHTML(t, state.boardFirstRender ? i : undefined)).join('')
+            : '<div class="column-empty">empty</div>'}
+          ${hidden > 0
+            ? `<button class="col-show-more" data-status="${esc(col.status)}">${hidden} older</button>`
+            : ''}
+          ${state.expandedCols.has(col.status) && cards.length > COL_LIMIT
+            ? `<button class="col-show-more col-show-less" data-status="${esc(col.status)}">Show less ↑</button>`
+            : ''}
+        </div>
+      </div>`;
+  }).join('');
+
+  state.boardFirstRender = false;
+
+  board.querySelectorAll('.col-show-more').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const s = btn.dataset.status;
+      if (state.expandedCols.has(s)) state.expandedCols.delete(s);
+      else state.expandedCols.add(s);
+      renderBoard();
+    });
+  });
+
+  let dragId = null;
+
+  // Ready indicator popover
+  let _popoverTimer = null;
+  let _popover = document.getElementById('ready-popover');
+  if (!_popover) {
+    _popover = document.createElement('div');
+    _popover.id = 'ready-popover';
+    _popover.className = 'ready-popover';
+    document.body.appendChild(_popover);
+  }
+  function showReadyPopover(el, t) {
+    const { ready, hasAcceptance, hasPlan, acceptanceIncomplete, planIncomplete, planApproved } = readiness(t);
+    const accIcon = !hasAcceptance ? '○' : acceptanceIncomplete ? '⚠' : '✓';
+    const accNote = acceptanceIncomplete ? ' — missing criteria or test items' : '';
+    const planIcon = !hasPlan ? '○' : (planIncomplete || !planApproved) ? '⚠' : '✓';
+    const planNote = planIncomplete ? ' — add real Approach notes' : '';
+    const signoffIcon = planApproved ? '✓' : '○';
+    const signoffNote = hasPlan && !planApproved ? ' — check Plan approved' : '';
+    debugLog('ready popover', t.id, { ready, hasAcceptance, hasPlan, acceptanceIncomplete, planIncomplete, planApproved });
+    _popover.innerHTML =
+      `<div>${accIcon} Acceptance${accNote}</div>` +
+      `<div>${planIcon} Plan${planNote}</div>` +
+      `<div>${signoffIcon} Sign-off${signoffNote}</div>` +
+      (ready ? '<div style="margin-top:4px;color:var(--col-done)">Signed off</div>'
+             : '<div style="margin-top:4px;color:var(--text-muted)">Add missing items to unblock</div>');
+    const r = el.getBoundingClientRect();
+    _popover.style.left = `${r.left}px`;
+    _popover.style.top  = `${r.top - _popover.offsetHeight - 8}px`;
+    _popover.classList.add('visible');
+    clearTimeout(_popoverTimer);
+    // reposition after paint (height now known)
+    requestAnimationFrame(() => {
+      _popover.style.top = `${r.top - _popover.offsetHeight - 8}px`;
+    });
+    _popoverTimer = setTimeout(() => _popover.classList.remove('visible'), 3000);
+  }
+
+  board.querySelectorAll('.ready-indicator').forEach(el => {
+    const show = eventName => {
+      debugLog('ready trigger', eventName, el.dataset.id);
+      const t = findTicketById(el.dataset.id);
+      if (t) showReadyPopover(el, t);
+    };
+    el.addEventListener('pointerenter', () => show('pointerenter'));
+    el.addEventListener('mouseenter', () => show('mouseenter'));
+    el.addEventListener('focus', () => show('focus'));
+    el.addEventListener('click', e => {
+      e.stopPropagation();
+      show('click');
+    });
+  });
+
+  board.querySelectorAll('.card-archive').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      const t = findTicketById(btn.dataset.id);
+      if (t) showConfirmToast('Archive ticket ' + esc(t.id) + '. Click to confirm!', () => moveCard(t, 'archived'));
+    });
+  });
+
+  let cardPointerOpen = false;
+
+  function openCard(el) {
+    if (!el || cardPointerOpen) return;
+    cardPointerOpen = true;
+    const id = cardTicketId(el);
+    openModal(id);
+    queueMicrotask(() => { cardPointerOpen = false; });
+  }
+
+  board.querySelectorAll('.card').forEach(el => {
+    el.addEventListener('pointerup', e => {
+      if (e.button !== 0) return;
+      if (e.target.closest('.card-archive, .ready-indicator, button, a, input, textarea, select, label')) return;
+      if (el.classList.contains('dragging')) return;
+      openCard(el);
+    });
+
+    el.addEventListener('click', e => {
+      if (e.target.closest('.card-archive, .ready-indicator, button, a, input, textarea, select, label')) return;
+      if (cardPointerOpen) return;
+      const id = cardTicketId(el);
+      openModal(id);
+    });
+
+    el.addEventListener('keydown', e => {
+      if (e.key !== 'Enter' && e.key !== ' ') return;
+      if (e.target !== el) return;
+      e.preventDefault();
+      const id = cardTicketId(el);
+      openModal(id);
+    });
+
+    el.addEventListener('dragstart', e => {
+      const id = cardTicketId(el);
+      dragId = id;
+      e.dataTransfer.setData('text/plain', dragId); // required by Safari to activate drag
+      e.dataTransfer.effectAllowed = 'move';
+      requestAnimationFrame(() => el.classList.add('dragging'));
+    });
+    el.addEventListener('dragend', () => {
+      el.classList.remove('dragging');
+      dragId = null;
+    });
+  });
+
+  board.querySelectorAll('.column-body').forEach(col => {
+    col.addEventListener('dragover', e => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      col.classList.add('drag-over');
+    });
+    col.addEventListener('dragleave', e => {
+      if (!col.contains(e.relatedTarget)) col.classList.remove('drag-over');
+    });
+    col.addEventListener('drop', e => {
+      e.preventDefault();
+      col.classList.remove('drag-over');
+      if (!dragId) return;
+      const newStatus = col.dataset.status;
+      const t = findTicketById(dragId);
+      if (!t || t.status === newStatus) return;
+      const { hasAcceptance } = readiness(t);
+      if (newStatus === 'closed' && t.acceptance_unchecked) {
+        showToast('⚠ Acceptance has unchecked items — mark all complete before closing', 'block');
+        return;
+      }
+      if (newStatus === 'in_progress' && !hasAcceptance) {
+        showToast('⚠ No acceptance criteria defined yet', 'warn');
+      }
+      moveCard(t, newStatus);
+    });
+  });
+}
+
+let _toastTimer = null;
+let _pendingConfirm = null;
+function showToast(msg, type = 'warn') {
+  const el = document.getElementById('drop-toast');
+  if (!el) return;
+  clearTimeout(_toastTimer);
+  _pendingConfirm = null;
+  el.textContent = msg;
+  el.className = type + ' show';
+  _toastTimer = setTimeout(() => { el.classList.remove('show'); }, 3000);
+}
+function showConfirmToast(msg, onConfirm) {
+  const el = document.getElementById('drop-toast');
+  if (!el) return;
+  clearTimeout(_toastTimer);
+  _pendingConfirm = onConfirm;
+  el.innerHTML = msg + '<button class="toast-confirm">Confirm</button>';
+  el.className = 'confirm show';
+  _toastTimer = setTimeout(() => { el.classList.remove('show'); _pendingConfirm = null; }, 4000);
+}
+document.getElementById('drop-toast')?.addEventListener('click', e => {
+  if (e.target.matches('.toast-confirm') && _pendingConfirm) {
+    const fn = _pendingConfirm;
+    _pendingConfirm = null;
+    clearTimeout(_toastTimer);
+    document.getElementById('drop-toast').classList.remove('show');
+    fn();
+  }
+});
+
+function readiness(t) {
+  const slugs = (t.docs || []).map(d => docSlug(t, d.file));
+  const hasAcceptance = slugs.includes('acceptance');
+  const hasPlan = slugs.includes('plan');
+  // acceptance_has_items: true=complete, false=exists but missing criteria/test items, null=unknown
+  const acceptanceIncomplete = hasAcceptance && t.acceptance_has_items === false;
+  const planIncomplete = hasPlan && t.plan_has_approach === false;
+  const planApproved = hasPlan && t.plan_approved === true;
+  const ready = hasAcceptance && hasPlan && !acceptanceIncomplete && !planIncomplete && planApproved;
+  const label = !hasAcceptance ? 'needs acc'
+    : acceptanceIncomplete ? 'incomplete'
+    : !hasPlan ? 'needs plan'
+    : planIncomplete ? 'plan incomplete'
+    : !planApproved ? 'needs signoff'
+    : 'ready';
+  return { ready, hasAcceptance, hasPlan, acceptanceIncomplete, planIncomplete, planApproved, label };
+}
+
+function cardHTML(t, idx) {
+  const { ready, label, acceptanceIncomplete, planIncomplete } = readiness(t);
+  const animClass = (idx !== undefined) ? ' animate-in' : '';
+  const animStyle = (idx !== undefined) ? ` style="--i:${idx}"` : '';
+  const pri = t.priority ?? 2;
+  const priLabel = ['P0 critical','P1 high','P2 normal','P3 low','P4 backlog'][pri] ?? `P${pri}`;
+  return `
+    <div class="card${t.id === state.selectedId ? ' focused' : ''}${animClass}" data-id="${esc(t.id)}" data-priority="${pri}" draggable="true" tabindex="0"${animStyle}>
+      <div class="card-head">
+        <span class="card-id">${esc(t.id)}</span>
+        ${typeBadge(t.type)}
+        ${t.status === 'closed' ? `<button class="card-archive" data-id="${esc(t.id)}" title="Archive this ticket">archive</button>` : ''}
+      </div>
+      <div class="card-body">
+        <p class="card-title">${esc(t.title)}</p>
+      </div>
+      <div class="card-footer">
+        <div class="card-meta-col">
+          <span class="card-meta-label">Age</span>
+          <span class="card-meta-val">${esc(age(t.created))}</span>
+        </div>
+        <div class="card-meta-col">
+          <span class="card-meta-label">Priority</span>
+          <span class="card-meta-val">${esc(priLabel)}</span>
+        </div>
+        <div class="card-meta-col">
+          <span class="card-meta-label">Status</span>
+          <span class="ready-indicator ${ready ? 'ready' : (acceptanceIncomplete || planIncomplete) ? 'incomplete' : 'not-ready'}" data-id="${esc(t.id)}" title="${ready ? 'Signed off' : 'Readiness details'}">
+            <span class="ready-dot"></span>
+            <span class="ready-label">${label}</span>
+          </span>
+        </div>
+      </div>
+    </div>`;
+}
+
+function cardTicketId(el) {
+  const attr = el?.getAttribute('data-id') || el?.dataset?.id || '';
+  if (attr) return attr;
+  const label = el?.querySelector('.card-id')?.textContent?.trim() || '';
+  return label.replace(/^"|"$/g, '');
+}
+
+function normalizeTicketId(id) {
+  return String(id ?? '').trim().replace(/^"+|"+$/g, '');
+}
+
+function findTicketById(id) {
+  const want = normalizeTicketId(id);
+  return state.tickets.find(t => normalizeTicketId(t.id) === want);
+}
+
+// ── Modal ─────────────────────────────────────────────────────────────────
+
+const modalState = { editMode: false, activeDoc: null };
+
+function openModal(id) {
+  const t = findTicketById(id);
+  if (!t) return;
+  state.selectedId = id;
+  modalState.editMode = false;
+  const docs = (t.docs || []).filter(d => !HIDDEN_DOC_SLUGS.has(docSlug(t, d.file)));
+  modalState.activeDoc = docs.length > 0 ? docs[0].file : null;
+  modalState.pickingDoc = false;
+  resetPanelDrag(document.getElementById('modal'));
+  resetPanelResize(document.getElementById('modal'));
+
+  setText('m-id',    t.id);
+  setText('m-title', t.title);
+  document.getElementById('m-type').innerHTML = typeBadge(t.type);
+
+  const statusColor = {
+    open: 'var(--col-open)', in_progress: 'var(--col-progress)',
+    closed: 'var(--col-done)', cancelled: 'var(--col-discarded)',
+  }[t.status] || 'var(--text)';
+  const { ready: mReady, label: mReadyLabel } = readiness(t);
+  const mReadyColor = mReady ? 'var(--col-done)' : 'var(--text-muted)';
+  document.getElementById('m-meta').innerHTML = [
+    { label:'Status',   html:`<span style="color:${statusColor};font-weight:500">${esc(titleCase(t.status.replace('_',' ')))}</span>` },
+    { label:'Type',     val: titleCase(t.type || 'task') },
+    { label:'Priority', val: `P${t.priority ?? 2}` },
+    { label:'Age',      val: age(t.created) || '—' },
+    { label:'Ready',    html:`<span style="color:${mReadyColor};font-weight:600;display:flex;align-items:center;gap:4px"><span style="width:7px;height:7px;border-radius:50%;background:${mReadyColor};display:inline-block;flex-shrink:0"></span>${esc(mReadyLabel)}</span>` },
+  ].map(m => `<div class="meta-item"><span class="meta-label">${esc(m.label)}</span><span class="meta-val">${m.html ?? esc(m.val)}</span></div>`).join('');
+
+  renderModalDocs(t);
+  renderModalBody(t);
+  refreshModalActions(t);
+  document.getElementById('modal-overlay').classList.add('open');
+  renderBoard();
+}
+
+const HIDDEN_DOC_SLUGS = new Set(['blueprint']);
+
+function navigateTicket(dir) {
+  if (modalState.editMode) return;
+  const cur = state.tickets.find(t => t.id === state.selectedId);
+  const ids = state.tickets.filter(t => t.status === cur?.status)
+    .sort((a, b) => (b.created || '').localeCompare(a.created || ''))
+    .map(t => t.id);
+  const idx = ids.indexOf(state.selectedId);
+  const nextId = ids[idx + dir];
+  if (!nextId) return;
+  openModal(nextId);
+}
+
+function renderModalDocs(t) {
+  const docs = (t.docs || []).filter(d => !HIDDEN_DOC_SLUGS.has(docSlug(t, d.file)));
+  const bar = document.getElementById('m-docs');
+  const locked = t.status === 'closed' || t.status === 'cancelled';
+  const pickingDoc = modalState.pickingDoc;
+  const canAddDoc = availableDocTypes(t).length > 0;
+
+  const descActive = modalState.activeDoc === null;
+  const descTab = docs.length > 0
+    ? `<button class="doc-tab${descActive ? ' active' : ''}" data-file="">Description</button>`
+    : '';
+
+  const ticketIds = state.tickets.filter(tk => tk.status === t.status)
+    .sort((a, b) => (b.created || '').localeCompare(a.created || ''))
+    .map(tk => tk.id);
+  const ticketIdx = ticketIds.indexOf(t.id);
+  const navPrev = `<button class="doc-nav-btn" id="btn-ticket-prev" title="Previous ticket"${ticketIdx <= 0 ? ' disabled' : ''}>‹</button>`;
+  const navNext = `<button class="doc-nav-btn" id="btn-ticket-next" title="Next ticket"${ticketIdx >= ticketIds.length - 1 ? ' disabled' : ''}>›</button>`;
+
+  const rightControls = modalState.editMode
+    ? `<div class="doc-tab-right">${navPrev}${navNext}<button class="doc-save-btn" id="btn-save-top">Save</button><button class="doc-cancel-btn" id="btn-cancel-top">Cancel</button></div>`
+    : locked
+      ? `<div class="doc-tab-right">${navPrev}${navNext}<span class="doc-locked-badge" title="Reopen ticket to edit">read-only</span></div>`
+      : `<div class="doc-tab-right">${navPrev}${navNext}${canAddDoc ? `<button class="doc-tab-new" id="btn-new-doc" title="Add companion doc"${pickingDoc ? ' disabled' : ''}>+ New doc</button>` : ''}<button class="doc-edit-btn" id="btn-edit-doc">Edit</button></div>`;
+
+  bar.innerHTML = descTab + docs.map(d => {
+    const active = d.file === modalState.activeDoc;
+    return `<button class="doc-tab${active ? ' active' : ''}" data-file="${d.file ?? ''}">${esc(d.name)}</button>`;
+  }).join('') + rightControls;
+
+  bar.querySelectorAll('.doc-tab').forEach(btn => {
+    btn.addEventListener('click', () => {
+      if (modalState.editMode) return;
+      modalState.pickingDoc = false;
+      modalState.activeDoc = btn.dataset.file || null;
+      renderModalDocs(t);
+      renderModalBody(t);
+      refreshModalActions(t);
+      document.getElementById('m-kbd').style.display = '';
+    });
+  });
+
+  document.getElementById('btn-ticket-prev')?.addEventListener('click', () => navigateTicket(-1));
+  document.getElementById('btn-ticket-next')?.addEventListener('click', () => navigateTicket(1));
+
+  document.getElementById('btn-new-doc')?.addEventListener('click', () => promptNewDoc(t));
+  document.getElementById('btn-edit-doc')?.addEventListener('click', () => enterEditMode(t));
+  document.getElementById('btn-save-top')?.addEventListener('click', () => saveEdit(t));
+  document.getElementById('btn-cancel-top')?.addEventListener('click', () => exitEditMode(t));
+
+  // Re-inject the persistent check tip (innerHTML wipe removes it)
+  const tip = document.createElement('span');
+  tip.id = 'm-check-tip';
+  tip.className = 'doc-check-tip';
+  tip.innerHTML = '<span class="doc-check-tip-icon">☑</span>Click to check off';
+  bar.appendChild(tip);
+}
+
+function injectSectionJumps(container) {
+  const headings = Array.from(container.querySelectorAll('.doc-heading-2'));
+  if (headings.length < 2) return;
+  headings.forEach(h => {
+    const slug = h.textContent.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+    h.id = 'section-' + slug;
+  });
+  const bar = document.createElement('div');
+  bar.className = 'section-jumps';
+  bar.innerHTML = headings.map(h => `<a class="section-jump-link" href="#" data-target="${esc(h.id)}">${esc(h.textContent.trim())}</a>`).join('');
+  bar.querySelectorAll('.section-jump-link').forEach(a => {
+    a.addEventListener('click', e => {
+      e.preventDefault();
+      container.querySelector('#' + a.dataset.target)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  });
+  // Insert before the content box so sticky works within the scroll container (.modal-body)
+  container.parentNode.insertBefore(bar, container);
+}
+
+function renderModalBody(t) {
+  const bodyEl  = document.getElementById('m-body');
+  const editEl  = document.getElementById('m-edit-area');
+  document.getElementById('m-editor-toolbar').classList.remove('open');
+  editEl.style.display = 'none';
+  bodyEl.style.display = '';
+  bodyEl.parentNode.querySelectorAll('.section-jumps').forEach(el => el.remove());
+
+  if (!modalState.activeDoc) {
+    const content = (t.body || '').trim();
+    if (!content) {
+      bodyEl.innerHTML = '<span class="modal-empty">Empty ticket.</span>';
+      return;
+    }
+    bodyEl.innerHTML = md(content);
+    injectSectionJumps(bodyEl);
+    return;
+  }
+
+  if (modalState.activeDoc) {
+    bodyEl.innerHTML = '<span class="modal-empty">Loading…</span>';
+    fetch(`/api/doc/${encodeURIComponent(modalState.activeDoc)}`)
+      .then(r => r.ok ? r.json() : Promise.reject())
+      .then(d => {
+        if (!d.content) { bodyEl.innerHTML = '<span class="modal-empty">Empty doc.</span>'; return; }
+        const slug = modalState.activeDoc ? docSlug(t, modalState.activeDoc) : '';
+        let warning = '';
+        if (slug === 'acceptance') {
+          const missing = [];
+          if (!hasFilledCheckbox(sectionContent(d.content, 'Criteria')))  missing.push('## Criteria');
+          if (!hasFilledCheckbox(sectionContent(d.content, 'Test Plan'))) missing.push('## Test Plan');
+          if (missing.length) {
+            warning = `<div class="acceptance-warning">⚠ ${missing.join(' and ')} ${missing.length > 1 ? 'need' : 'needs'} checklist items — sprint complete will block</div>`;
+          }
+        } else if (slug === 'plan') {
+          if (!hasUsefulSectionText(sectionContent(d.content, 'Approach'), ['How will we implement it?'])) {
+            warning = '<div class="acceptance-warning">⚠ ## Approach needs real notes — add the minimal plan before building</div>';
+          }
+        } else if (slug === 'eval-report') {
+          const runIdMatch = d.content.match(/^evaluator-run-id:\s*(\S+)/m);
+          if (runIdMatch) {
+            warning = `<div class="eval-run-id"><span class="eval-run-id-label">evaluator-run-id</span>${esc(runIdMatch[1])}</div>`;
+            d.content = d.content.replace(/^evaluator-run-id:[^\n]*\n?/m, '');
+          } else {
+            warning = '<div class="acceptance-warning">⚠ evaluator-run-id missing — sprint complete will block</div>';
+          }
+        }
+        bodyEl.innerHTML = warning + md(d.content);
+        tagCheckboxes(bodyEl);
+        injectSectionJumps(bodyEl);
+      })
+      .catch(() => { bodyEl.innerHTML = '<span class="modal-empty">Could not load doc.</span>'; });
+  }
+}
+
+function enterEditMode(t) {
+  if (modalState.editMode) return;
+  if (t.status === 'closed' || t.status === 'cancelled') return;
+  modalState.editMode = true;
+  renderModalDocs(t);
+  document.getElementById('m-docs').classList.add('editing');
+  const bodyEl = document.getElementById('m-body');
+  const editEl = document.getElementById('m-edit-area');
+
+  if (modalState.activeDoc) {
+    fetch(`/api/doc/${encodeURIComponent(modalState.activeDoc)}`)
+      .then(r => r.ok ? r.json() : { content: '' })
+      .then(d => { editEl.value = ensureDocGuideComments(t, d.content || ''); });
+  } else {
+    editEl.value = (t.body || '').trim();
+  }
+
+  bodyEl.style.display = 'none';
+  bodyEl.parentNode.querySelectorAll('.section-jumps').forEach(el => el.remove());
+  document.getElementById('m-editor-toolbar').classList.add('open');
+  editEl.style.display = 'block';
+  document.getElementById('m-kb-hint').style.display = '';
+  editEl.focus();
+
+  document.getElementById('m-actions').innerHTML = '';
+  document.getElementById('m-kbd').style.display = 'none';
+}
+
+function exitEditMode(t) {
+  modalState.editMode = false;
+  document.getElementById('m-docs').classList.remove('editing');
+  document.getElementById('m-editor-toolbar').classList.remove('open');
+  document.getElementById('m-kb-hint').style.display = 'none';
+  setText('m-title', t.title);
+  renderModalDocs(t);
+  renderModalBody(t);
+  refreshModalActions(t);
+  document.getElementById('m-kbd').style.display = '';
+  renderBoard();
+}
+
+async function saveEdit(t) {
+  const content = normalizeDocTitle(t, document.getElementById('m-edit-area').value);
+  const validationError = validateDocStructure(t, content);
+  if (validationError) {
+    alert(validationError);
+    return;
+  }
+  try {
+    if (modalState.activeDoc) {
+      await fetch(`/api/doc/${encodeURIComponent(modalState.activeDoc)}`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content }),
+      });
+    } else {
+      await fetch(`/api/ticket/${t.id}/body`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ body: content }),
+      });
+      t.body = content;
+      const headingMatch = content.match(/^#\s+(.+)$/m);
+      if (headingMatch) t.title = headingMatch[1].trim();
+    }
+  } catch { /* server unavailable */ }
+  exitEditMode(t);
+}
+
+function normalizeDocTitle(t, content) {
+  if (!modalState.activeDoc) return content;
+
+  const slug = docSlug(t, modalState.activeDoc);
+  const titleBySlug = {
+    acceptance: 'Acceptance',
+    plan: 'Plan',
+  };
+  const title = titleBySlug[slug];
+  if (!title) return ensureDocTicketLine(t, content);
+
+  let next = content;
+  if (/^#\s+.+$/m.test(content)) {
+    next = content.replace(/^#\s+.+$/m, `# ${title}`);
+  } else {
+    next = `# ${title}\n\n${content}`;
+  }
+  return ensureDocTicketLine(t, next);
+}
+
+function ensureDocTicketLine(t, content) {
+  if (/^Ticket:\s*.+?\s*$/m.test(content)) return content;
+  const ticketBlock = `<!-- Keep the Ticket line below unchanged. -->\nTicket: \`${displayTicketId(t)}\``;
+  if (/^#\s+.+$/m.test(content)) {
+    return content.replace(/^(#\s+.+\n*)/m, `$1\n${ticketBlock}\n`);
+  }
+  return `${ticketBlock}\n\n${content}`;
+}
+
+function validateDocStructure(t, content) {
+  if (!modalState.activeDoc) return '';
+
+  const expectedTicket = `Ticket: \`${displayTicketId(t)}\``;
+  const ticketLine = content.match(/^Ticket:\s*(.+?)\s*$/m);
+  const actualTicketId = ticketLine ? normalizeTicketLineId(ticketLine[1]) : '';
+  if (actualTicketId !== displayTicketId(t)) {
+    return `Keep the ticket line unchanged: ${expectedTicket}`;
+  }
+
+  const slug = docSlug(t, modalState.activeDoc);
+  const requiredBySlug = {
+    acceptance: ['## Criteria', '## Test Plan', '## QA'],
+    plan: ['## Sign-off', '## Approach', '## Decisions'],
+  };
+  const required = requiredBySlug[slug] || [];
+  const missing = required.filter(h => !content.includes(h));
+  if (missing.length > 0) {
+    return `Keep these heading labels unchanged: ${missing.join(', ')}`;
+  }
+
+  const contentError = validateDocContent(slug, content);
+  if (contentError) return contentError;
+
+  return '';
+}
+
+function sectionContent(content, heading) {
+  const re = new RegExp(`^##\\s+${heading}\\s*$`, 'm');
+  const match = re.exec(content);
+  if (!match) return '';
+  const start = match.index + match[0].length;
+  const rest = content.slice(start);
+  const next = rest.search(/^##\s+/m);
+  return (next === -1 ? rest : rest.slice(0, next)).trim();
+}
+
+function withoutGuidance(text) {
+  return text
+    .replace(/<!--[\s\S]*?-->/g, '')
+    .split('\n')
+    .map(line => line.trim())
+    .filter(Boolean)
+    .filter(line => !line.startsWith('The checklist of behavior'))
+    .filter(line => !line.startsWith('The commands or checks'))
+    .filter(line => !line.startsWith('The approved sprint brief'))
+    .join('\n')
+    .trim();
+}
+
+function hasFilledCheckbox(text) {
+  return /^- \[[ xX]\]\s+\S/m.test(withoutGuidance(text));
+}
+
+function hasUsefulSectionText(text, placeholders = []) {
+  const cleaned = withoutGuidance(text);
+  if (!cleaned) return false;
+  return !placeholders.some(p => cleaned === p);
+}
+
+function validateDocContent(slug, content) {
+  if (slug === 'acceptance') {
+    if (!hasFilledCheckbox(sectionContent(content, 'Criteria'))) {
+      return 'Add at least one filled checklist item under ## Criteria before saving.';
+    }
+    if (!hasFilledCheckbox(sectionContent(content, 'Test Plan'))) {
+      return 'Add at least one test command or check under ## Test Plan before saving.';
+    }
+  } else if (slug === 'plan') {
+    if (!hasUsefulSectionText(sectionContent(content, 'Approach'), ['How will we implement it?'])) {
+      return 'Add approach notes under ## Approach before saving.';
+    }
+  }
+  return '';
+}
+
+function promptNewDoc(t) {
+  modalState.pickingDoc = true;
+  renderModalDocs(t);
+
+  const bodyEl = document.getElementById('m-body');
+  const editEl = document.getElementById('m-edit-area');
+  editEl.style.display = 'none';
+  bodyEl.style.display = '';
+
+  const existingSlugs = (t.docs || []).map(d => docSlug(t, d.file));
+  const suggested     = recommendedSlug(t.status, existingSlugs);
+  const available = availableDocTypes(t);
+  let selectedSlug = available.some(dt => dt.slug === suggested) ? suggested : (available[0]?.slug || '');
+  const statusLabel   = titleCase(t.status.replace('_', ' '));
+
+  const selectedType = () => available.find(dt => dt.slug === selectedSlug);
+  const updateSelection = () => {
+    bodyEl.querySelectorAll('.doc-type-card').forEach(card => {
+      const selected = card.dataset.slug === selectedSlug;
+      card.classList.toggle('selected', selected);
+      card.setAttribute('aria-pressed', selected ? 'true' : 'false');
+    });
+    const editBtn = document.getElementById('act-picker-edit');
+    const dt = selectedType();
+    if (editBtn) {
+      editBtn.disabled = !dt;
+      editBtn.textContent = dt ? `Edit ${dt.name}` : 'Edit doc';
+    }
+  };
+
+  bodyEl.innerHTML = [
+    `<div class="doc-picker-label">This ticket is <strong>${esc(statusLabel)}</strong> — choose a doc type to add:</div>`,
+    ...available.map(dt =>
+      `<button type="button" class="doc-type-card${dt.slug === suggested ? ' suggested' : ''}${dt.slug === selectedSlug ? ' selected' : ''}" data-slug="${esc(dt.slug)}" data-name="${esc(dt.name)}" aria-pressed="${dt.slug === selectedSlug ? 'true' : 'false'}">` +
+        `<div class="doc-type-name">${esc(dt.name)}${dt.slug === suggested ? ' <span class="doc-type-badge">Suggested</span>' : ''}</div>` +
+        `<div class="doc-type-hint">${esc(dt.hint)}</div>` +
+      `</button>`
+    ),
+    available.length === 0 ? '<div class="modal-empty">All doc types already created.</div>' : '',
+  ].join('');
+
+  document.getElementById('m-actions').innerHTML =
+    `<button class="btn btn-primary" id="act-picker-edit"${available.length === 0 ? ' disabled' : ''}>Edit doc</button>` +
+    `<button class="btn" id="act-picker-cancel">Cancel</button>`;
+  document.getElementById('m-kbd').style.display = 'none';
+
+  document.getElementById('act-picker-edit').addEventListener('click', () => {
+    const dt = selectedType();
+    if (dt) selectDocType(t, dt.slug, dt.name);
+  });
+
+  document.getElementById('act-picker-cancel').addEventListener('click', () => {
+    modalState.pickingDoc = false;
+    renderModalBody(t); renderModalDocs(t); refreshModalActions(t);
+    document.getElementById('m-kbd').style.display = '';
+  });
+
+  bodyEl.querySelectorAll('.doc-type-card').forEach(card => {
+    card.addEventListener('click', () => {
+      selectedSlug = card.dataset.slug;
+      updateSelection();
+    });
+  });
+  updateSelection();
+}
+
+function selectDocType(t, slug, name) {
+  modalState.pickingDoc = false;
+  const file     = docFileFor(t, slug);
+  const rawTemplate = DOC_TYPES.find(d => d.slug === slug)?.template || `# ${name}\n\n`;
+  const template = rawTemplate.replaceAll('<id>', t.id);
+
+  fetch(`/api/doc/${encodeURIComponent(file)}`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ content: template }),
+  }).then(() => {
+    t.docs = t.docs || [];
+    if (!t.docs.some(d => d.file === file)) t.docs.push({ name, file });
+    modalState.activeDoc = file;
+    renderModalDocs(t);
+    // pre-fill textarea with template and enter edit mode
+    const bodyEl = document.getElementById('m-body');
+    const editEl = document.getElementById('m-edit-area');
+    bodyEl.style.display = 'none';
+    document.getElementById('m-editor-toolbar').classList.add('open');
+    editEl.value = template;
+    editEl.style.display = 'block';
+    editEl.focus();
+    modalState.editMode = true;
+    document.getElementById('m-actions').innerHTML = '';
+    document.getElementById('m-kbd').style.display = 'none';
+  });
+}
+
+function linePrefixForTextarea(textarea, prefix) {
+  const start = textarea.selectionStart;
+  const needsNewline = start > 0 && textarea.value[start - 1] !== '\n';
+  return (needsNewline ? '\n' : '') + prefix;
+}
+
+function insertEditorSnippet(kind, textarea = document.getElementById('m-edit-area')) {
+  textarea.focus();
+
+  const start = textarea.selectionStart;
+  const end = textarea.selectionEnd;
+  const selected = textarea.value.slice(start, end);
+  let before = '';
+  let after = '';
+  let cursorOffset = 0;
+
+  if (kind === 'checkbox') {
+    before = linePrefixForTextarea(textarea, '- [ ] ');
+  } else if (kind === 'checked') {
+    before = linePrefixForTextarea(textarea, '- [x] ');
+  } else if (kind === 'bullet') {
+    before = linePrefixForTextarea(textarea, '- ');
+  } else if (kind === 'number') {
+    before = linePrefixForTextarea(textarea, '1. ');
+  } else if (kind === 'heading') {
+    before = linePrefixForTextarea(textarea, '## ');
+  } else if (kind === 'code') {
+    before = '`';
+    after = '`';
+  } else if (kind === 'toggle') {
+    before = linePrefixForTextarea(textarea, '<details>\n<summary>');
+    after = '</summary>\n\n</details>';
+  } else if (kind === 'bold') {
+    before = '**';
+    after = '**';
+  }
+
+  textarea.setSelectionRange(start, end);
+  document.execCommand('insertText', false, before + selected + after);
+  if (!selected && after) {
+    cursorOffset = start + before.length;
+    textarea.setSelectionRange(cursorOffset, cursorOffset);
+  }
+}
+
+function continuationPrefix(line) {
+  let match = line.match(/^(\s*)-\s+\[([ xX])\]\s+(.*)$/);
+  if (match) return { prefix: `${match[1]}- [${match[2]}] `, content: match[3] };
+
+  match = line.match(/^(\s*)-\s+(.*)$/);
+  if (match) return { prefix: `${match[1]}- `, content: match[2] };
+
+  match = line.match(/^(\s*)\*\*(\d+)\.\s+(.*)$/);
+  if (match) return { prefix: `${match[1]}**${Number(match[2]) + 1}. `, content: match[3] };
+
+  match = line.match(/^(\s*)(\d+)\.\s+(.*)$/);
+  if (match) return { prefix: `${match[1]}${Number(match[2]) + 1}. `, content: match[3] };
+
+  return null;
+}
+
+function handleMarkdownEnter(event, textarea) {
+  if (event.key !== 'Enter' || event.shiftKey || event.altKey || event.ctrlKey || event.metaKey) return;
+  if (textarea.selectionStart !== textarea.selectionEnd) return;
+
+  const cursor = textarea.selectionStart;
+  const value = textarea.value;
+  const lineStart = value.lastIndexOf('\n', cursor - 1) + 1;
+  const lineEndAtCursor = value.slice(lineStart, cursor);
+  const line = lineEndAtCursor;
+  const next = continuationPrefix(line);
+  if (!next) return;
+
+  event.preventDefault();
+  if (next.content.trim()) {
+    textarea.setSelectionRange(cursor, cursor);
+    document.execCommand('insertText', false, `\n${next.prefix}`);
+  } else {
+    textarea.setSelectionRange(lineStart, cursor);
+    document.execCommand('insertText', false, '');
+    const nextChar = textarea.value[textarea.selectionStart];
+    if (nextChar === '\n') {
+      const pos = textarea.selectionStart;
+      textarea.setSelectionRange(pos, pos + 1);
+      document.execCommand('insertText', false, '');
+    }
+  }
+}
+
+function ensureTicketLineComment(content) {
+  if (!/^Ticket:\s*`[^`]+`/m.test(content)) return content;
+  if (content.includes('Keep the Ticket line below unchanged.')) return content;
+  return content.replace(/^Ticket:\s*`[^`]+`/m, '<!-- Keep the Ticket line below unchanged. -->\n$&');
+}
+
+function ensureHeadingComment(content, heading, comment) {
+  if (content.includes(comment)) return content;
+  const re = new RegExp(`(^##\\s+${heading}\\s*$)`, 'm');
+  return content.replace(re, `$1\n${comment}`);
+}
+
+function ensureDocGuideComments(t, content) {
+  let next = ensureTicketLineComment(content);
+  const slug = modalState.activeDoc ? docSlug(t, modalState.activeDoc) : '';
+  if (slug === 'acceptance') {
+    next = ensureHeadingComment(next, 'Criteria', '<!-- Add or edit checklist items below. Keep this heading unchanged. -->');
+    next = ensureHeadingComment(next, 'Test Plan', '<!-- Add or edit test commands below. Keep this heading unchanged. -->');
+    next = ensureHeadingComment(next, 'QA', '<!-- Add sign-off items below. Keep this heading unchanged. -->');
+  } else if (slug === 'plan') {
+    next = ensureHeadingComment(next, 'Approach', '<!-- Add or edit approach notes below. Keep this heading unchanged. -->');
+    next = ensureHeadingComment(next, 'Decisions', '<!-- Record choices made during the sprint. Keep this heading unchanged. -->');
+  }
+  return next;
+}
+
+function closeModal() {
+  if (modalState.editMode) return; // don't close while editing
+  document.getElementById('modal-overlay').classList.remove('open');
+  modalState.pickingDoc = false;
+  state.selectedId = null;
+  renderBoard();
+}
+
+function refreshModalActions(t) {
+  const locked = t.status === 'closed' || t.status === 'cancelled';
+  document.getElementById('m-actions').innerHTML = locked ? '' : `
+    <button class="btn btn-danger" id="act-discard" title="Move this ticket to Discarded when the work is abandoned or no longer needed.">Discard ticket ✕</button>
+  `;
+  document.getElementById('act-discard')?.addEventListener('click', () => {
+    if (confirm('Discard this ticket? Use Discard only when the work is abandoned or no longer needed.')) {
+      moveCard(t, 'cancelled');
+    }
+  });
+}
+
+async function moveCard(t, newStatus) {
+  try {
+    await fetch(`/api/ticket/${t.id}/status`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: newStatus }),
+    });
+  } catch { /* server unavailable — update local state only */ }
+  t.status = newStatus;
+  renderHeader();
+  renderSidebar();
+  const modalOpen = document.getElementById('modal-overlay').classList.contains('open');
+  if (modalOpen) closeModal(); else renderBoard();
+}
+
+// ── Semantic ticket matching ──────────────────────────────────────────────
+
+const _STOP = new Set(['a','an','the','and','or','in','on','for','to','of','with','by',
+  'from','is','are','was','were','be','been','as','at','it','its','this','that','into',
+  'via','add','fix','feat','chore','refactor','update','remove','change']);
+
+function tokenize(s) {
+  return s.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/)
+    .filter(w => w.length > 2 && !_STOP.has(w));
+}
+
+function semanticScore(commitText, ticketTitle) {
+  const ctoks = new Set(tokenize(commitText));
+  const ttoks  = tokenize(ticketTitle);
+  const hits   = ttoks.filter(w => ctoks.has(w)).length;
+  return hits / Math.max(ttoks.length, 1);
+}
+
+// ── Commit detail panel ───────────────────────────────────────────────────
+
+async function openCommitPanel(hash) {
+  const overlay = document.getElementById('commit-overlay');
+  resetPanelDrag(document.getElementById('commit-panel'));
+  document.getElementById('co-hash').textContent    = hash.slice(0, 7);
+  document.getElementById('co-subject').textContent = '…';
+  document.getElementById('co-meta').textContent    = '';
+  document.getElementById('co-body').textContent    = '';
+  document.getElementById('co-tickets').innerHTML   = '';
+  document.getElementById('co-files').innerHTML     = '';
+  overlay.classList.add('open');
+
+  try {
+    const d = await fetch(`/api/commit/${hash}`).then(r => r.json());
+    document.getElementById('co-subject').textContent = d.subject;
+    document.getElementById('co-meta').innerHTML =
+      `<span class="commit-meta-chip">${esc(d.author || 'Unknown author')}</span>` +
+      `<span class="commit-meta-chip">${esc(d.date || 'Unknown date')}</span>`;
+    document.getElementById('co-body').textContent    = d.body || '';
+
+    const ticketsEl = document.getElementById('co-tickets');
+    const direct    = state.tickets.filter(t => d.related_ticket_ids.includes(t.id));
+
+    let chips, label, note = '';
+    if (direct.length) {
+      chips = direct;
+      label = 'Related tickets';
+    } else {
+      // Semantic backfill: score all tickets against the commit text
+      const commitText = `${d.subject} ${d.body} ${d.files.join(' ')}`;
+      const scored = state.tickets
+        .filter(t => t.status !== 'cancelled')
+        .map(t => ({ t, score: semanticScore(commitText, t.title) }))
+        .filter(x => x.score > 0)
+        .sort((a, b) => b.score - a.score);
+      chips = scored.map(x => x.t);
+      label = chips.length ? 'Likely related tickets' : 'Active sprint context';
+      note  = chips.length
+        ? `<div class="commit-section-note">No ticket IDs in commit — matched by keyword.</div>`
+        : `<div class="commit-section-note">No ticket IDs in commit. Tip: prefix commits with <code class="doc-code">${state.tickets.find(t=>t.status==='in_progress')?.id ?? 't-xxxx'}: </code></div>`;
+      if (!chips.length) chips = state.tickets.filter(t => t.status === 'open' || t.status === 'in_progress');
+    }
+
+    if (chips.length) {
+      ticketsEl.innerHTML =
+        `<div class="commit-section"><div class="commit-section-label">${label}</div>${note}` +
+        `<div class="commit-ticket-chips">` +
+        chips.map(t =>
+          `<button class="commit-ticket-chip" data-id="${esc(t.id)}">${esc(t.id)} — ${esc(t.title)}</button>`
+        ).join('') + `</div></div>`;
+      ticketsEl.querySelectorAll('.commit-ticket-chip').forEach(btn => {
+        btn.addEventListener('click', () => { closeCommitPanel(); openModal(btn.dataset.id); });
+      });
+    }
+
+    if (d.files.length) {
+      document.getElementById('co-files').innerHTML =
+        `<div class="commit-section"><div class="commit-section-label">${d.files.length} file${d.files.length > 1 ? 's' : ''} changed</div>` +
+        `<div class="commit-file-list">` +
+        d.files.map(f => `<div class="commit-file">${esc(f)}</div>`).join('') +
+        `</div></div>`;
+    }
+  } catch {
+    document.getElementById('co-subject').textContent = 'Could not load commit.';
+  }
+}
+
+function closeCommitPanel() {
+  document.getElementById('commit-overlay').classList.remove('open');
+}
+
+document.getElementById('commit-close').addEventListener('click', closeCommitPanel);
+document.getElementById('commit-overlay').addEventListener('click', e => {
+  if (e.target === e.currentTarget) closeCommitPanel();
+});
+
+function resetPanelDrag(panel) {
+  if (!panel) return;
+  panel.dataset.dragX = '0';
+  panel.dataset.dragY = '0';
+  panel.style.setProperty('--drag-x', '0px');
+  panel.style.setProperty('--drag-y', '0px');
+}
+
+function resetPanelResize(panel) {
+  if (!panel) return;
+  panel.style.width = '';
+  panel.style.height = '';
+}
+
+function makePanelDraggable(panelId) {
+  const panel = document.getElementById(panelId);
+  const header = panel?.querySelector('.modal-header');
+  if (!panel || !header) return;
+
+  const sideHandles = [...(panel.querySelectorAll('.modal-side-drag') || [])];
+  const handles = [header, ...sideHandles];
+
+  let dragging = false;
+  let activeHandle = null;
+  let startX = 0;
+  let startY = 0;
+  let baseX = 0;
+  let baseY = 0;
+
+  handles.forEach(handle => {
+    handle.addEventListener('pointerdown', e => {
+      if (e.target.closest('button, a, input, textarea, select')) return;
+      dragging = true;
+      activeHandle = handle;
+      startX = e.clientX;
+      startY = e.clientY;
+      baseX = Number(panel.dataset.dragX || 0);
+      baseY = Number(panel.dataset.dragY || 0);
+      handle.classList.add('dragging');
+      panel.classList.add('dragging-panel');
+      document.body.style.userSelect = 'none';
+      handle.setPointerCapture(e.pointerId);
+    });
+
+    handle.addEventListener('pointermove', e => {
+      if (!dragging) return;
+      const nextX = baseX + e.clientX - startX;
+      const nextY = baseY + e.clientY - startY;
+      panel.dataset.dragX = String(nextX);
+      panel.dataset.dragY = String(nextY);
+      panel.style.setProperty('--drag-x', `${nextX}px`);
+      panel.style.setProperty('--drag-y', `${nextY}px`);
+    });
+
+    const stopDrag = e => {
+      if (!dragging) return;
+      dragging = false;
+      handle.classList.remove('dragging');
+      panel.classList.remove('dragging-panel');
+      document.body.style.userSelect = '';
+      activeHandle = null;
+      try { handle.releasePointerCapture(e.pointerId); } catch {}
+    };
+
+    handle.addEventListener('pointerup', stopDrag);
+    handle.addEventListener('pointercancel', stopDrag);
+  });
+}
+
+function makePanelResizable(panelId) {
+  const panel = document.getElementById(panelId);
+  const handle = panel?.querySelector('.modal-resize-handle');
+  if (!panel || !handle) return;
+
+  let resizing = false;
+  let startX = 0;
+  let startY = 0;
+  let startWidth = 0;
+  let startHeight = 0;
+
+  handle.addEventListener('pointerdown', e => {
+    resizing = true;
+    startX = e.clientX;
+    startY = e.clientY;
+    const rect = panel.getBoundingClientRect();
+    startWidth = rect.width;
+    startHeight = rect.height;
+    handle.classList.add('resizing');
+    panel.classList.add('resizing-panel');
+    document.body.style.userSelect = 'none';
+    handle.setPointerCapture(e.pointerId);
+    e.preventDefault();
+    e.stopPropagation();
+  });
+
+  handle.addEventListener('pointermove', e => {
+    if (!resizing) return;
+    const maxWidth = Math.max(320, window.innerWidth - 24);
+    const maxHeight = Math.max(320, window.innerHeight - 24);
+    const minWidth = Math.min(420, maxWidth);
+    const minHeight = Math.min(320, maxHeight);
+    const nextWidth = Math.min(maxWidth, Math.max(minWidth, startWidth + e.clientX - startX));
+    const nextHeight = Math.min(maxHeight, Math.max(minHeight, startHeight + e.clientY - startY));
+    panel.style.width = `${nextWidth}px`;
+    panel.style.height = `${nextHeight}px`;
+  });
+
+  const stopResize = e => {
+    if (!resizing) return;
+    resizing = false;
+    handle.classList.remove('resizing');
+    panel.classList.remove('resizing-panel');
+    document.body.style.userSelect = '';
+    try { handle.releasePointerCapture(e.pointerId); } catch {}
+  };
+
+  handle.addEventListener('pointerup', stopResize);
+  handle.addEventListener('pointercancel', stopResize);
+}
+
+makePanelDraggable('modal');
+makePanelDraggable('commit-panel');
+makePanelDraggable('create-modal');
+makePanelResizable('modal');
+makePanelResizable('create-modal');
+
+// ── Inline checkbox toggle ────────────────────────────────────────────────
+
+function tagCheckboxes(el) {
+  const t = state.tickets.find(tk => tk.id === state.selectedId);
+  const locked = !t || t.status === 'closed' || t.status === 'cancelled';
+  let count = 0;
+  el.querySelectorAll('.doc-bullet[data-src-idx]').forEach(bullet => {
+    if (!locked) {
+      // Promote the source index to data-check-idx so the click handler finds it
+      bullet.dataset.checkIdx = bullet.dataset.srcIdx;
+      count++;
+    } else {
+      delete bullet.dataset.checkIdx;
+    }
+  });
+  const tip = document.getElementById('m-check-tip');
+  if (tip) tip.classList.toggle('visible', count > 0 && !modalState.editMode && !locked);
+}
+
+async function toggleCheckbox(docFile, checkIdx) {
+  let r, d;
+  try {
+    r = await fetch(`/api/doc/${encodeURIComponent(docFile)}`);
+    d = await r.json();
+  } catch { return; }
+  let i = 0;
+  const updated = d.content.replace(/^(- \[)([ xX])(\] .+)$/gm, (m, pre, mark, rest) => {
+    if (i++ === checkIdx) return pre + (mark.trim() === '' ? 'x' : ' ') + rest;
+    return m;
+  });
+  try {
+    await fetch(`/api/doc/${encodeURIComponent(docFile)}`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content: updated }),
+    });
+  } catch { /* best effort */ }
+}
+
+// Delegated handler — fires once, lives on #m-body permanently
+document.getElementById('m-body').addEventListener('click', async e => {
+  if (modalState.editMode) return;
+  const bullet = e.target.closest('.doc-bullet[data-check-idx]');
+  if (!bullet || !modalState.activeDoc) return;
+  const currentTicket = state.tickets.find(tk => tk.id === state.selectedId);
+  if (!currentTicket || currentTicket.status === 'closed' || currentTicket.status === 'cancelled') return;
+  e.stopPropagation();
+
+  const idx = Number(bullet.dataset.checkIdx);
+  const marker = bullet.querySelector('.doc-check-marker');
+  const wasOpen = bullet.classList.contains('doc-check-open');
+
+  // Optimistic UI update
+  bullet.classList.add('toggling');
+  bullet.classList.toggle('doc-check-open', !wasOpen);
+  if (marker) { marker.classList.toggle('open', !wasOpen); marker.textContent = wasOpen ? '✓' : ''; }
+
+  await toggleCheckbox(modalState.activeDoc, idx);
+  bullet.classList.remove('toggling');
+
+  // Re-sync tickets so readiness indicators update on the board
+  try {
+    const tr = await fetch('/api/tickets');
+    if (tr.ok) { state.tickets = await tr.json(); renderBoard(); }
+  } catch {}
+  // Re-render the modal body to reflect the saved state
+  const t = state.tickets.find(tk => tk.id === state.selectedId);
+  if (t) renderModalBody(t);
+});
+
+// ── Create ticket ─────────────────────────────────────────────────────────
+
+(function initCreate() {
+  const overlay  = document.getElementById('create-overlay');
+  const titleEl  = document.getElementById('c-title');
+  const detectEl = document.getElementById('c-detect');
+  const typesEl  = document.getElementById('c-types');
+  const priEl    = document.getElementById('c-priorities');
+  const bodyEl   = document.getElementById('c-body');
+  const queueEl  = document.getElementById('c-queue');
+
+  let selectedType = 'task';
+  let selectedPri  = 2;
+  let templateUntouched = true;
+
+  function open() {
+    selectedType = 'task'; selectedPri = 2; templateUntouched = true;
+    titleEl.value = ''; detectEl.textContent = '';
+    bodyEl.value = TYPE_TEMPLATES['task'] || '';
+    queueEl.textContent = '→ will open in: Open';
+    resetPanelDrag(document.getElementById('create-modal'));
+    resetPanelResize(document.getElementById('create-modal'));
+    renderTypePills(); renderPriPills();
+    overlay.classList.add('open');
+    requestAnimationFrame(() => titleEl.focus());
+  }
+
+  function close() { overlay.classList.remove('open'); }
+
+  function renderTypePills() {
+    typesEl.innerHTML = TICKET_TYPES.map(tp =>
+      `<button class="create-pill${tp === selectedType ? ' active' : ''}" data-type="${tp}">${titleCase(tp)}</button>`
+    ).join('');
+    typesEl.querySelectorAll('.create-pill').forEach(btn => {
+      btn.addEventListener('click', () => {
+        selectedType = btn.dataset.type;
+        detectEl.textContent = '';
+        applyTemplate();
+        renderTypePills();
+      });
+    });
+  }
+
+  function renderPriPills() {
+    priEl.innerHTML = [0,1,2,3,4].map(p =>
+      `<button class="create-pill${p === selectedPri ? ' active' : ''}" data-pri="${p}">P${p}</button>`
+    ).join('');
+    priEl.querySelectorAll('.create-pill').forEach(btn => {
+      btn.addEventListener('click', () => { selectedPri = +btn.dataset.pri; renderPriPills(); });
+    });
+  }
+
+  function applyTemplate() {
+    if (!templateUntouched) return;
+    bodyEl.value = TYPE_TEMPLATES[selectedType] || '';
+    templateUntouched = true;
+  }
+
+  bodyEl.addEventListener('input', () => {
+    // once the user edits away from the template, stop auto-filling
+    templateUntouched = bodyEl.value === (TYPE_TEMPLATES[selectedType] || '');
+  });
+
+  let detectTimer;
+  titleEl.addEventListener('input', () => {
+    clearTimeout(detectTimer);
+    detectTimer = setTimeout(() => {
+      const title = titleEl.value.trim();
+      if (!title) { detectEl.textContent = ''; return; }
+      const { type, reason } = detectTicketType(title);
+      detectEl.textContent = `Detected: ${titleCase(type)} — ${reason}`;
+      if (type !== selectedType) {
+        selectedType = type;
+        applyTemplate();
+        renderTypePills();
+      }
+    }, 350);
+  });
+
+  async function submit() {
+    const title = titleEl.value.trim();
+    if (!title) { titleEl.focus(); titleEl.style.borderColor = 'var(--col-discarded)'; return; }
+    titleEl.style.borderColor = '';
+    document.getElementById('c-submit').disabled = true;
+    try {
+      const ticket = await fetch('/api/tickets', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title, type: selectedType, status: 'open', priority: selectedPri, body: bodyEl.value }),
+      }).then(r => r.json());
+      state.tickets.unshift(ticket);
+      renderBoard();
+      close();
+    } catch {
+      document.getElementById('c-submit').disabled = false;
+    }
+  }
+
+  document.getElementById('btn-create').addEventListener('click', open);
+  document.getElementById('create-close').addEventListener('click', close);
+  document.getElementById('c-cancel').addEventListener('click', close);
+  document.getElementById('c-submit').addEventListener('click', submit);
+  overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
+  titleEl.addEventListener('keydown', e => { if (e.key === 'Enter') submit(); });
+})();
+
+// ── Keyboard ──────────────────────────────────────────────────────────────
+
+document.addEventListener('keydown', e => {
+  const open = document.getElementById('modal-overlay').classList.contains('open');
+  if (!open) return;
+
+  if (e.key === 'Escape') {
+    if (modalState.editMode) {
+      const t = state.tickets.find(t => t.id === state.selectedId);
+      if (t) exitEditMode(t);
+    } else {
+      closeModal();
+    }
+    return;
+  }
+
+});
+
+document.getElementById('modal-overlay').addEventListener('click', e => {
+  if (e.target === e.currentTarget) closeModal();
+});
+document.getElementById('btn-close').addEventListener('click', () => {
+  if (modalState.editMode) {
+    const t = state.tickets.find(t => t.id === state.selectedId);
+    if (t) exitEditMode(t);
+  } else {
+    closeModal();
+  }
+});
+document.getElementById('m-editor-toolbar').addEventListener('click', e => {
+  const button = e.target.closest('[data-insert]');
+  if (!button) return;
+  insertEditorSnippet(button.dataset.insert);
+});
+document.getElementById('c-editor-toolbar').addEventListener('click', e => {
+  const button = e.target.closest('[data-insert]');
+  if (!button) return;
+  insertEditorSnippet(button.dataset.insert, document.getElementById('c-body'));
+});
+document.getElementById('m-edit-area').addEventListener('keydown', e => {
+  handleMarkdownEnter(e, e.currentTarget);
+});
+document.getElementById('c-body').addEventListener('keydown', e => {
+  handleMarkdownEnter(e, e.currentTarget);
+});
+
+// ── Util ──────────────────────────────────────────────────────────────────
+
+function setText(id, val) {
+  const el = document.getElementById(id);
+  if (el) el.textContent = String(val ?? '');
+}
+
+// ── Sidebar collapse + resize ─────────────────────────────────────────────
+
+(function initSidebar() {
+  const sidebar      = document.getElementById('sidebar');
+  const toggle       = document.getElementById('sidebar-toggle');
+  const handle       = document.getElementById('sidebar-resize');
+  const W_KEY        = 'sprint-check-sidebar-w';
+  const C_KEY        = 'sprint-check-sidebar-collapsed';
+  const MIN_W = 160, MAX_W = 480, DEFAULT_W = 240;
+
+  let width     = parseInt(localStorage.getItem(W_KEY) || DEFAULT_W);
+  let collapsed = localStorage.getItem(C_KEY) === 'true';
+
+  function applyState(animate) {
+    if (!animate) sidebar.style.transition = 'none';
+    if (collapsed) {
+      sidebar.classList.add('collapsed');
+      sidebar.style.width = '44px';
+      handle.style.display = 'none';
+    } else {
+      sidebar.classList.remove('collapsed');
+      sidebar.style.width = width + 'px';
+      handle.style.display = '';
+    }
+    if (!animate) requestAnimationFrame(() => { sidebar.style.transition = ''; });
+  }
+
+  function expandAndScrollTo(sectionId) {
+    if (collapsed) {
+      collapsed = false;
+      localStorage.setItem(C_KEY, false);
+      applyState(true);
+    }
+    const target = document.getElementById(sectionId);
+    if (target) {
+      setTimeout(() => target.scrollIntoView({ behavior: 'smooth', block: 'start' }), 220);
+    }
+  }
+
+  toggle.addEventListener('click', () => {
+    collapsed = !collapsed;
+    localStorage.setItem(C_KEY, collapsed);
+    applyState(true);
+  });
+
+  document.querySelectorAll('.rail-icon').forEach(icon => {
+    icon.addEventListener('click', () => expandAndScrollTo(icon.dataset.section));
+  });
+
+  // Drag-to-resize
+  let dragging = false, startX = 0, startW = 0;
+
+  handle.addEventListener('mousedown', e => {
+    dragging = true; startX = e.clientX;
+    startW = sidebar.getBoundingClientRect().width;
+    handle.classList.add('dragging');
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+    e.preventDefault();
+  });
+
+  document.addEventListener('mousemove', e => {
+    if (!dragging) return;
+    width = Math.min(MAX_W, Math.max(MIN_W, startW + (e.clientX - startX)));
+    sidebar.style.width = width + 'px';
+  });
+
+  document.addEventListener('mouseup', () => {
+    if (!dragging) return;
+    dragging = false;
+    handle.classList.remove('dragging');
+    document.body.style.cursor = '';
+    document.body.style.userSelect = '';
+    localStorage.setItem(W_KEY, width);
+  });
+
+  applyState(false);
+})();
+
+// ── Board search ─────────────────────────────────────────────────────────
+
+(function initBoardSearch() {
+  const input = document.getElementById('board-search');
+  const clear = document.getElementById('board-search-clear');
+  const shell = document.getElementById('board-search-shell');
+  const modeButtons = document.querySelectorAll('.search-mode-btn');
+  if (!input || !clear || !shell) return;
+  let whyTimer = null;
+  let whyRequest = 0;
+
+  function setMode(mode) {
+    state.queryMode = mode;
+    modeButtons.forEach(btn => {
+      const active = btn.dataset.mode === mode;
+      btn.classList.toggle('active', active);
+      btn.setAttribute('aria-pressed', active ? 'true' : 'false');
+    });
+    input.placeholder = mode === 'why' ? 'Why was this file built this way?' : 'Search tickets...';
+    input.setAttribute('aria-label', mode === 'why' ? 'Find ticket history for a file' : 'Search tickets');
+    renderBoard();
+  }
+
+  async function runWhy(value) {
+    const file = whyQueryFromInput(value);
+    clearTimeout(whyTimer);
+    if (state.queryMode !== 'why' || !file) {
+      state.why = null;
+      renderBoard();
+      return;
+    }
+    const requestId = ++whyRequest;
+    state.why = { file, loading: true, results: [], message: '' };
+    renderBoard();
+    try {
+      const data = await fetch(`/api/why?file=${encodeURIComponent(file)}`).then(r => r.json());
+      if (requestId !== whyRequest) return;
+      state.why = data;
+    } catch {
+      if (requestId !== whyRequest) return;
+      state.why = { file, error: 'Could not load file history.', results: [] };
+    }
+    renderBoard();
+  }
+
+  function scheduleWhy(value) {
+    clearTimeout(whyTimer);
+    whyTimer = setTimeout(() => runWhy(value), 250);
+  }
+
+  function apply(value) {
+    const shortcut = String(value).match(/^why(?::|\s+)(.+)$/i);
+    if (shortcut) {
+      setMode('why');
+      value = shortcut[1];
+    }
+    state.query = value;
+    input.value = value;
+    shell.classList.toggle('has-query', Boolean(value.trim()));
+    if (state.queryMode === 'why') scheduleWhy(value);
+    else state.why = null;
+    renderBoard();
+  }
+
+  input.addEventListener('input', () => apply(input.value));
+  input.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && input.value) {
+      e.stopPropagation();
+      apply('');
+    }
+  });
+  modeButtons.forEach(btn => {
+    btn.addEventListener('click', () => {
+      setMode(btn.dataset.mode);
+      if (state.queryMode === 'why') scheduleWhy(input.value);
+      else state.why = null;
+      renderBoard();
+      input.focus();
+    });
+  });
+  clear.addEventListener('click', () => {
+    apply('');
+    input.focus();
+  });
+  setMode('search');
+})();
+
+// ── Tour panel ────────────────────────────────────────────────────────────
+
+(function initTour() {
+  const overlay = document.getElementById('tour-overlay');
+  const open  = () => overlay.classList.add('open');
+  const close = () => overlay.classList.remove('open');
+  document.getElementById('tour-btn').addEventListener('click', open);
+  document.getElementById('tour-close').addEventListener('click', close);
+  overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && overlay.classList.contains('open')) close(); });
+})();
+
+// ── Theme toggle ──────────────────────────────────────────────────────────
+
+(function initTheme() {
+  const btn  = document.getElementById('theme-toggle');
+  const html = document.documentElement;
+  const stored = localStorage.getItem('sprint-check-theme');
+  const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+  const isDark = stored ? stored === 'dark' : prefersDark;
+
+  function apply(dark) {
+    if (dark) {
+      html.removeAttribute('data-theme');
+      btn.textContent = '🌙';
+    } else {
+      html.setAttribute('data-theme', 'light');
+      btn.textContent = '☀️';
+    }
+    localStorage.setItem('sprint-check-theme', dark ? 'dark' : 'light');
+  }
+
+  apply(isDark);
+  btn.addEventListener('click', () => apply(html.getAttribute('data-theme') === 'light'));
+})();
+
+// ── Boot ──────────────────────────────────────────────────────────────────
+
+loadData();
+setInterval(loadData, 8000);
+</script>
+</body>
+</html>
